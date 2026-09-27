@@ -125,13 +125,15 @@ function weekRowsOf(date, from) {
   return out;
 }
 
+// 시간 칸은 '1~4교시' 가 한 줄에, 장소 칸은 '득량남초병설유치원' 이 두 줄 안에 들어가야 한다.
+// 사진에서 '1-5교/시' 로 접히고 기관 이름이 잘려 나갔다. 내용 칸에서 그만큼 덜어 온다.
 const WEEK_COLS = [
-  { label: '날짜\n(요일)', w: 8.6 },
-  { label: '계', w: 9.7 },
-  { label: '담당자', w: 9.3 },
-  { label: '주요 업무 내용', w: 52.2, align: 'left' },
-  { label: '시간', w: 7.3 },
-  { label: '장소', w: 12.8 },
+  { label: '날짜\n(요일)', w: 8.2 },
+  { label: '계', w: 8.6 },
+  { label: '담당자', w: 8.6 },
+  { label: '주요 업무 내용', w: 46.4, align: 'left' },
+  { label: '시간', w: 10.2 },
+  { label: '장소', w: 18.0 },
 ];
 
 /** 주간 표 하나 */
@@ -309,7 +311,8 @@ export function monthlyForm(first) {
   const nMeal = nDays == null ? null : nDays - range(first, last).filter((d) => noMeal.has(d)).length;
 
   rows.push([
-    { t: '월별 교육 활동 중점', colSpan: 2, rowSpan: 2 },
+    // 좁고 긴 칸이라 글자가 멋대로 접힌다. 두 글자씩 끊어 세운다.
+    { t: '월별\n교육\n활동\n중점', colSpan: 2, rowSpan: 2 },
     { t: focus, rowSpan: 2, align: 'left' },
     '수업일수 (급식)',
   ]);

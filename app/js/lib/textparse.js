@@ -141,6 +141,9 @@ export function extractTime(line) {
   if (m) return { value: `${m[1]}교시`, rest: strip(line, m) };
   m = line.match(/(아침활동|아침|조회|중식|점심시간|점심|방과\s*후|종례|창체|창의적\s*체험활동)/);
   if (m) return { value: m[1].replace(/\s+/g, ''), rest: strip(line, m) };
+  // '9시', '9시 30분' — 월중계획 칸에 이렇게 적는 학교가 많다.
+  m = line.match(/(?:^|[\s(])(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?(?![간갈])/);
+  if (m) return { value: m[2] ? `${m[1]}시 ${m[2]}분` : `${m[1]}시`, rest: strip(line, m) };
   return null;
 }
 
@@ -161,6 +164,34 @@ export function extractTarget(line) {
   m = line.match(/(\d)\s*-\s*(\d)(?![\d])/);
   if (m) return { value: `${m[1]}학년 ${m[2]}반`, rest: strip(line, m) };
   return null;
+}
+
+/**
+ * '1,3년' · '2,3교시' 는 한 덩어리인데 쉼표로 잘려 '1' 과 '3년' 이 된다.
+ * 숫자만 남은 조각은 뒤 조각에 도로 붙인다.
+ */
+export function mergeNumParts(parts) {
+  const out = [];
+  for (let i = 0; i < parts.length; i++) {
+    let t = String(parts[i] || '').trim();
+    if (!t) continue;
+    while (/^\d{1,2}$/.test(t) && i + 1 < parts.length && /^\d/.test(String(parts[i + 1]).trim())) {
+      t += `,${String(parts[i + 1]).trim()}`;
+      i += 1;
+    }
+    out.push(t);
+  }
+  return out;
+}
+
+/** 이 조각이 장소인가. 학교 밖 기관 이름(득량남초병설유치원·벌교초)까지 본다. */
+export function looksPlace(t) {
+  const x = String(t).trim();
+  if (!x || x.length > 20) return false;
+  if (/장소/.test(x)) return true;                 // '부서별 장소'
+  if (PLACES.some((p) => x.includes(p))) return true;
+  if (/교시$|학년$|반$|년$/.test(x)) return false;
+  return /(관|실|장|원|터|초|중|고|교|센터|공원|계단|복도|현관|앞|동|층|일대)$/.test(x);
 }
 
 // ── 장소 ───────────────────────────────────────────────────
@@ -420,7 +451,7 @@ export function parseMonthPlan(rows, ctx = {}) {
     const note = col.noteIdx >= 0 ? String(r[col.noteIdx] || '').trim() : '';
 
     for (const piece of splitActivities(content)) {
-      const item = parseActivityPiece(piece, { date, year, month, note });
+      const item = parseActivityPiece(piece, { date, year, month, note, names: ctx.names || [] });
       if (item) out.push(item);
     }
   }
@@ -432,7 +463,7 @@ export function parseMonthPlan(rows, ctx = {}) {
  * 괄호 안은 시간·대상을 먼저 걷어내고 남는 것을 장소로 본다.
  * ('부서별 장소', 'AI교실', '별초병설유' 처럼 장소 이름을 목록으로 다 담을 수 없기 때문)
  */
-export function parseActivityPiece(piece, { date = '', year, month, note = '' } = {}) {
+export function parseActivityPiece(piece, { date = '', year, month, note = '', names = [] } = {}) {
   let line = String(piece || '').trim();
   if (!line) return null;
 
@@ -455,11 +486,30 @@ export function parseActivityPiece(piece, { date = '', year, month, note = '' } 
 
   const paren = line.match(/^([^()]*?)\s*\(([^()]*)\)\s*(.*)$/);
   if (paren && paren[1].trim()) {
-    let inside = paren[2];
-    const t = extractTime(inside); if (t) { time = t.value; inside = t.rest; }
-    const g = extractTarget(inside); if (g) { target = g.value; inside = g.rest; }
-    const o = extractOwner(inside); if (o) { owner = o.value; inside = o.rest; }
-    place = cleanTitle(inside);
+    // 괄호 안은 쉼표로 끊어 하나씩 가린다.
+    //
+    // 여태는 시간·대상·담당만 떼어내고 '남은 것 전부' 를 장소에 넣었다. 그래서
+    // '유아이음교육 공동교육과정(찾아오는 오감놀이-아시아, 9시, 득량남초병설유치원)' 의
+    // 장소가 '찾아오는 오감놀이-아시아, 득량남초병설유치원' 이 되고, 정작 활동 내용은
+    // 장소 칸에 들어가 앉았다. 조각마다 무엇인지 보고 제자리에 넣는다.
+    const rest = [];
+    for (const piece0 of mergeNumParts(paren[2].split(/[,，]/))) {
+      let p0 = piece0;
+      if (!p0) continue;
+      const t = extractTime(p0);
+      if (t && !t.rest.trim() && !time) { time = t.value; continue; }
+      const g = extractTarget(p0);
+      if (g && !g.rest.trim() && !target) { target = g.value; continue; }
+      if (!place && looksPlace(p0)) { place = p0.replace(/^장소\s*[:：]\s*/, '').trim(); continue; }
+      const o = extractOwner(p0);
+      if (o && !o.rest.trim() && !owner) { owner = o.value; continue; }
+      // 홀로 선 두세 글자가 업무분장 명단에 있는 이름이면 담당이다.
+      // 명단에 없는 낱말까지 이름으로 보면 '한글축전' 같은 것이 담당에 들어간다.
+      if (!owner && names.includes(p0)) { owner = p0; continue; }
+      rest.push(p0);
+    }
+    // 남은 것은 활동 내용이다. 장소가 아니다.
+    if (rest.length) note = [note, rest.join(', ')].filter(Boolean).join('\n');
     line = `${paren[1]} ${paren[3]}`.trim();
   } else {
     const t = extractTime(line); if (t) { time = t.value; line = t.rest; }

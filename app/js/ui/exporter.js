@@ -115,7 +115,8 @@ export function openPeriodExport(from, to, title, form = 'weekly') {
   // 시간표가 그 주에 바뀔 일이 없으면 굳이 같이 돌리지 않는 분들이 있어서다.
   const full = form === 'monthly' ? monthlyForm(from) : weeklyForm(from, to);
   const lite = form === 'monthly' ? null : weeklyForm(from, to, { timetable: false });
-  let doc = full;
+  // 주간은 '주요 활동만' 을 먼저 보여준다. 시간표가 바뀌는 주가 드물어 이쪽을 더 자주 쓴다.
+  let doc = lite || full;
   const margin = form === 'monthly' ? '15mm' : '10mm';
   const marginX = form === 'monthly' ? 4251 : 2834;
   const baseName = form === 'monthly' ? '월중교육활동계획' : '주간활동계획';
@@ -134,10 +135,11 @@ export function openPeriodExport(from, to, title, form = 'weekly') {
   const out = h('textarea', { class: 'input mono', rows: 18, spellcheck: 'false' });
   out.value = plain;
   const plainBox = h('div', { style: { display: 'none' } }, out,
-    h('p', { class: 'muted small' }, '메신저·게시판에 붙일 때 쓰세요. 결재에는 왼쪽 [학교 서식]을 쓰십시오.'));
+    h('p', { class: 'muted small' }, '메신저·게시판에 붙일 때 쓰세요. 결재에는 왼쪽 서식을 쓰십시오.'));
 
   // 맨 끝 칸이 줄글, 그 앞이 서식이다.
-  const TABS = lite ? ['학교 서식', '주요 활동만', '줄글 요약'] : ['학교 서식', '줄글 요약'];
+  const TABS = lite ? ['주요 활동만', '학교 서식', '줄글 요약'] : ['학교 서식', '줄글 요약'];
+  const DOCS = lite ? [lite, full] : [full];
   const plainIdx = TABS.length - 1;
   const seg = h('div', { class: 'seg' },
     ...TABS.map((t, i) => h('button', {
@@ -145,7 +147,7 @@ export function openPeriodExport(from, to, title, form = 'weekly') {
       onClick: (e) => {
         for (const b of e.currentTarget.parentNode.children) b.classList.remove('on');
         e.currentTarget.classList.add('on');
-        if (i < plainIdx) { doc = i === 0 ? full : lite; draw(); }
+        if (i < plainIdx) { doc = DOCS[i]; draw(); }
         preview.style.display = i < plainIdx ? '' : 'none';
         plainBox.style.display = i < plainIdx ? 'none' : '';
       },

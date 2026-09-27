@@ -50,7 +50,10 @@ export function renderImporter(ctx) {
   /** 기준 연도 입력값 위에, 문서에서 찾은 연·월을 덧씌운다. */
   const docContext = (text) => {
     const found = findMonthContext(text) || {};
-    return { year: found.year || +yearInput.value, month: found.month };
+    // 업무분장 명단을 함께 넘긴다. 괄호 안에 홀로 선 두세 글자가 그 명단에 있으면
+    // 담당자로 본다. 명단에 없는 낱말까지 이름으로 치면 '한글축전' 이 담당이 된다.
+    const names = list('staff').map((x) => String(x.name || '').trim()).filter((x) => x.length >= 2);
+    return { year: found.year || +yearInput.value, month: found.month, names };
   };
 
   const setRows = (rows, source) => {
