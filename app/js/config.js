@@ -41,14 +41,33 @@ const DEFAULTS = {
 // 지금 브라우저가 돌리고 있는 앱의 판. app/sw.js 의 VERSION 과 같이 올린다.
 // [설정] 에서 서버에 올라간 판과 견줘 보여 준다. '내 화면만 안 바뀐다' 를
 // 눈으로 확인할 수 있어야 하기 때문이다.
-export const APP_VERSION = 'v30';
+export const APP_VERSION = 'v32';
 
 const LS_KEY = 'sam.config';
 
 export function loadConfig() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { saved = {}; }
-  return deepMerge(structuredClone(DEFAULTS), saved);
+  return deepMerge(structuredClone(DEFAULTS), stripBlankKeys(saved));
+}
+
+/**
+ * 이 컴퓨터에 저장된 설정에서 '빈 파이어베이스 열쇠' 를 걷어낸다.
+ *
+ * 설정 화면에서 [저장] 을 누르면 여섯 칸을 그대로 받아 적는다. 그 칸이 비어 있던 때에
+ * 한 번 저장하면 빈 문자열이 앱에 박힌 열쇠를 덮어써 버린다. 그러면 저장 위치가
+ * 'Firebase 실시간 공유' 로 보이는데도 열쇠가 없어 **말없이 이 컴퓨터 저장으로 돈다.**
+ * 실제로 그렇게 됐다. 빈 값은 '지정하지 않음' 으로 보고 앱 기본값을 쓴다.
+ */
+function stripBlankKeys(saved) {
+  const out = { ...saved };
+  if (out.firebase && typeof out.firebase === 'object') {
+    const fb = {};
+    for (const [k, v] of Object.entries(out.firebase)) if (String(v || '').trim()) fb[k] = v;
+    if (Object.keys(fb).length) out.firebase = fb; else delete out.firebase;
+  }
+  if (!String(out.schoolId || '').trim()) delete out.schoolId;
+  return out;
 }
 
 export function saveConfig(cfg) {

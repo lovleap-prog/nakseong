@@ -72,6 +72,11 @@ export async function initStore(cfg) {
 
 export function backendKind() { return backend ? backend.kind : 'none'; }
 
+// 학교 서버에 붙으려다 실패한 사유. 설정이 '이 컴퓨터' 인 것과는 손쓸 방법이 다르다.
+let initErr = '';
+export function setInitError(m) { initErr = m || ''; }
+export function initError() { return initErr; }
+
 /** 자료를 어디서 읽고 있는지 — 학교 코드·계정. 혼자 쓰는 방식이면 빈 값이다. */
 export function whereAmI() { return (backend && backend.where) ? backend.where() : {}; }
 

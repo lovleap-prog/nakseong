@@ -142,7 +142,22 @@ export function renderSettings(ctx) {
         '현재 연결: ', h('strong', {}, backendKind() === 'firestore' ? 'Firebase 실시간 공유' : '이 컴퓨터(로컬)'),
         ' — ', counts),
       fbBox,
-      h('p', { class: 'muted small' }, '저장 위치를 바꾸면 새로 고침해야 적용됩니다. 설정 방법은 docs/SETUP-firebase.md 를 보세요.'))),
+      h('div', { class: 'row gap' },
+        h('button', {
+          class: 'btn btn-sm',
+          title: '이 컴퓨터에 저장된 설정을 지우고 앱에 들어 있는 학교 기본 설정으로 되돌립니다',
+          onClick: async () => {
+            if (!(await confirmDialog(
+              '이 컴퓨터에 저장된 설정만 지우고 앱 기본 설정(학교 전체 공유)으로 되돌립니다. '
+              + '입력하신 교육활동·시간표 자료는 지워지지 않습니다.',
+              { okText: '되돌리기' }))) return;
+            resetConfig();
+            location.reload();
+          },
+        }, '\u21BA 학교 기본 설정으로 되돌리기')),
+      h('p', { class: 'muted small' },
+        '칸을 비워 두면 앱에 들어 있는 기본 열쇠를 씁니다. 저장 위치를 바꾸면 새로 고침해야 적용됩니다. ',
+        '설정 방법은 docs/SETUP-firebase.md 를 보세요.'))),
 
     // 로컬로 먼저 써 보다 넘어온 경우, 그때 넣은 자료가 따라오지 않았을 수 있다.
     versionBox(),
@@ -283,7 +298,12 @@ export function renderSettings(ctx) {
             next.links = readLinkRows()
               .map((l) => ({ label: l.label || l.url.replace(/^https?:\/\//, '').slice(0, 24), url: l.url }));
           }
-          for (const k of fbFields) next.firebase[k] = fb[k].value.trim();
+          // 빈 칸은 '지우기' 가 아니라 '건드리지 않음' 이다. 빈 값을 적어 넣으면 앱에 박힌
+          // 열쇠를 덮어써서, 화면은 '학교 전체' 인데 조용히 이 컴퓨터 저장으로 돌게 된다.
+          for (const k of fbFields) {
+            const v = fb[k].value.trim();
+            if (v) next.firebase[k] = v; else delete next.firebase[k];
+          }
           next.hwp = { font: fontIn.value.trim() || '함초롬바탕', fontSize: Number(sizeIn.value) || 11 };
           next.timetableGroups = groupIn.value.split('\n').map((x) => x.trim()).filter(Boolean);
 
@@ -420,6 +440,10 @@ function whereBox() {
     h('div', { class: 'ver-row' }, h('span', {}, '저장 방식'),
       h('code', {}, shared ? '학교 전체 (Firebase)' : '이 컴퓨터에만')),
     shared ? h('div', { class: 'ver-row' }, h('span', {}, '학교 코드'), h('code', {}, code)) : null,
+    shared ? null : h('p', { class: 'muted small' },
+      '아래 자료는 ', h('b', {}, '이 브라우저 안(크롬·엣지의 사이트 저장 공간)'), ' 에만 있습니다. ',
+      '인터넷 어딘가에 올라가 있지 않아서 다른 컴퓨터·휴대전화에서는 보이지 않고, ',
+      h('b', {}, '이 브라우저의 사이트 데이터를 지우면 같이 지워집니다.')),
     shared ? h('div', { class: 'ver-row' }, h('span', {}, '로그인 계정'), h('code', {}, w.email || '(로그인 안 됨)')) : null,
     h('div', { class: 'table-wrap' },
       h('table', { class: 'tbl' },
@@ -434,6 +458,9 @@ function whereBox() {
         [...new Set(Object.values(errs))].join(', '),
         '). 파이어스토어 규칙을 확인해 주세요 — docs/SETUP-firebase.md 의 규칙을 통째로 붙여넣으면 됩니다.')
       : null,
+    shared ? null : h('p', { class: 'warn-text' },
+      '학교 전체로 연결하면 이 자료를 올릴 수 있는 [📦 이 컴퓨터에 남아 있는 예전 자료] 상자가 바로 아래에 나타납니다. ',
+      '연결 전에는 올릴 곳이 없어 단추도 나오지 않습니다. 화면 맨 위 띠의 [학교 전체로 연결] 을 누르세요.'),
     shared && code === 'default'
       ? h('p', { class: 'muted small' },
         '학교 코드가 ', h('code', {}, 'default'), ' 입니다. [자료 저장 방식] 에서 코드를 바꾸면 ',

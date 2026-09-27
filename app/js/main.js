@@ -4,7 +4,7 @@ import { loadConfig, saveConfig, DEFAULTS } from './config.js';
 import { effectiveLinks } from './links.js';
 import {
   initStore, on, loadSavedUser, currentUser, setUser, isAdmin, backendKind,
-  signIn, signOut, needsSignIn, isApproved, pruneAudit,
+  signIn, signOut, needsSignIn, isApproved, pruneAudit, setInitError, initError,
 } from './store.js';
 import { today, fmtK, addDays } from './model.js';
 import { renderDaily, renderWeekly, renderMonthly } from './views/schedule.js';
@@ -96,11 +96,16 @@ function catchSilentFailures() {
 function localOnlyBar() {
   const meant = DEFAULTS.backend === 'firestore' && !!(DEFAULTS.firebase || {}).apiKey;
   if (!meant || backendKind() === 'firestore') return null;
+  // 붙으려다 실패한 것과, 애초에 '이 컴퓨터' 로 맞춰져 있는 것은 손쓸 방법이 다르다.
+  const failed = !!initError();
   return h('div', { class: 'local-bar', role: 'alert' },
     h('span', { class: 'local-bar-ico' }, '\u26A0'),
     h('span', {},
       h('b', {}, '지금 이 컴퓨터에만 저장됩니다.'),
-      ' 여기서 적은 것은 다른 선생님께 보이지 않습니다.'),
+      ' 여기서 적은 것은 다른 선생님께 보이지 않습니다. ',
+      failed
+        ? h('span', { class: 'muted' }, `학교 서버에 붙지 못했습니다 — ${initError()}`)
+        : h('span', { class: 'muted' }, '이 컴퓨터가 [이 컴퓨터에만 저장] 으로 맞춰져 있습니다.')),
     h('button', {
       class: 'btn btn-sm btn-primary',
       onClick: () => {
@@ -109,7 +114,7 @@ function localOnlyBar() {
         saveConfig(c);
         location.reload();
       },
-    }, '학교 전체로 연결'));
+    }, failed ? '다시 연결해 보기' : '학교 전체로 연결'));
 }
 
 async function boot() {
@@ -123,6 +128,7 @@ async function boot() {
   } catch (e) {
     console.error(e);
     // 갈아탄 것을 설정에 저장하지는 않는다. 다음에 열 때 다시 학교 전체로 붙어야 한다.
+    setInitError(e && e.message ? e.message : String(e));
     toast('학교 서버에 연결하지 못했습니다. 이 컴퓨터 저장으로 엽니다.', 'warn');
     await initStore({ ...cfg, backend: 'local' });
   }
