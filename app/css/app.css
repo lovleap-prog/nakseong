@@ -1440,3 +1440,21 @@ body.widget .widget-body { padding-bottom: 16px; }
   background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn);
 }
 .nomeal-tag.sm { font-size: 9.5px; padding: 0 4px; align-self: flex-start; }
+
+/* 달력 칸에서 바로 올리기 */
+.month-cell, .week-col { position: relative; }
+.cell-add {
+  position: absolute; right: 3px; top: 3px; z-index: 3;
+  width: 20px; height: 20px; line-height: 18px; text-align: center;
+  font-size: 13px; font-weight: 700; color: var(--brand);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  opacity: 0; cursor: pointer; padding: 0;
+}
+.month-cell:hover .cell-add, .week-col:hover .cell-add,
+.cell-add:hover, .cell-add:focus { opacity: 1; border-color: var(--brand); }
+.cell-add:hover { background: color-mix(in srgb, var(--brand) 12%, var(--panel)); }
+.cell-add.wk { top: 6px; right: 6px; }
+/* 손가락으로 쓰는 화면에는 hover 가 없다 */
+@media (hover: none) { .cell-add { opacity: .5; } }
+/* 일일의 [일정 추가] 는 가장 큰 일이라 눈에 띄게 */
+.btn-add { font-size: 14.5px; font-weight: 700; padding: 9px 16px; box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 28%, transparent); }

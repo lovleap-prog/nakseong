@@ -436,7 +436,11 @@ export function renderDaily(ctx) {
         h('input', { type: 'date', class: 'input date-pick', value: d, onChange: (e) => ctx.setDate(e.target.value) }),
         dayBellPicker(d, rerender)),
       actions: [
-        h('button', { class: 'btn btn-primary', onClick: () => openActivityForm(null, { defaultDate: d, onSaved: rerender }) }, '+ 일정 추가'),
+        h('button', {
+          class: 'btn btn-primary btn-add',
+          title: '이 날짜에 교육활동을 올립니다. 관리자 확인 뒤 모두에게 보입니다.',
+          onClick: () => openActivityForm(null, { defaultDate: d, onSaved: rerender }),
+        }, '\u2795 일정 추가'),
         h('button', { class: 'btn', onClick: () => openDayExport(d) }, '결재문구·한글파일'),
       ],
     }),
@@ -630,6 +634,10 @@ export function renderWeekly(ctx) {
           off ? h('span', { class: 'week-off' }, off) : null,
           isNoMeal(day) ? h('span', { class: 'nomeal-tag', title: '비급식일 — 급식 없음' }, '\u{1F37D} 비급식') : null,
           pend ? h('span', { class: 'dot-pending', title: `확인 대기 ${pend}건` }, pend) : null),
+        h('button', {
+          class: 'cell-add wk', title: `${fmtK(day, { year: false })}에 일정 추가`,
+          onClick: () => openActivityForm(null, { defaultDate: day, onSaved: rerender }),
+        }, '\uFF0B'),
         h('div', { class: 'week-body' },
           ...acts.map((a) => activityCard(a, { compact: true, onChange: rerender, checkDate: day })),
           ...recs.map((a) => activityCard(a, { compact: true, checkDate: day })),
@@ -710,6 +718,14 @@ export function renderMonthly(ctx) {
             title: off || '',
           },
             h('span', { class: 'month-num' }, parseYmd(day).getDate()),
+            // 달력에서 날짜를 보고 바로 올릴 수 있게 한다. 붙여넣기보다 이 길이 쉽다.
+            // 칸 자체가 단추라 그 안에 단추를 또 넣을 수 없어 눌리는 span 으로 둔다.
+            h('span', {
+              class: 'cell-add', role: 'button', tabindex: '0',
+              title: `${fmtK(day, { year: false })}에 일정 추가`,
+              onClick: (e) => { e.stopPropagation(); e.preventDefault(); openActivityForm(null, { defaultDate: day, onSaved: () => ctx.refresh() }); },
+              onKeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); openActivityForm(null, { defaultDate: day, onSaved: () => ctx.refresh() }); } },
+            }, '\uFF0B'),
             off ? h('span', { class: 'month-off', title: off }, off) : null,
             isNoMeal(day) ? h('span', { class: 'nomeal-tag sm', title: '비급식일 — 급식 없음' }, '\u{1F37D} 비급식') : null,
             lanes ? h('span', { class: 'month-bandspace' }) : null,
