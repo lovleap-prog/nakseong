@@ -3,6 +3,7 @@ import { h, toast, confirmDialog, download, clear } from '../lib/dom.js';
 import { loadConfig, saveConfig, resetConfig, APP_VERSION } from '../config.js';
 import {
   currentUser, setUser, exportAll, importAll, backendKind, list, isAdmin, signOut,
+  whereAmI, readErrors,
 } from '../store.js';
 import { ROLE } from '../model.js';
 import { insertSample, removeSample, hasSample } from '../sampledata.js';
@@ -145,6 +146,8 @@ export function renderSettings(ctx) {
 
     // 로컬로 먼저 써 보다 넘어온 경우, 그때 넣은 자료가 따라오지 않았을 수 있다.
     versionBox(),
+
+    whereBox(),
 
     leftoverBox(ctx),
 
@@ -379,6 +382,63 @@ function versionBox() {
     h('div', { class: 'row gap' },
       h('button', { class: 'btn', onClick: (e) => check(e.currentTarget) }, '서버 판 확인'),
       h('button', { class: 'btn btn-danger', onClick: (e) => force(e.currentTarget) }, '새 판 받기'))));
+}
+
+/**
+ * 자료 진단 — '넣은 것이 안 보인다' 를 혼자 가릴 수 있게 한다.
+ *
+ * 화면이 비어 있는 까닭은 셋인데 셋 다 똑같이 '없음' 으로 보인다.
+ * (1) 다른 곳을 보고 있다(학교 코드가 다르거나 이 컴퓨터 저장으로 돌아가 있다)
+ * (2) 규칙에 막혀 못 읽는다  (3) 정말로 비어 있다.
+ * 그래서 어디를 보고 있는지, 컬렉션마다 몇 건인지, 막힌 것이 있는지를 한 자리에 적는다.
+ */
+const DIAG_COLS = ['activities', 'timetable', 'academic', 'afterschool', 'recurring',
+  'bells', 'daybell', 'notices', 'trips', 'staff'];
+
+function whereBox() {
+  const shared = backendKind() === 'firestore';
+  const w = whereAmI();
+  const code = w.schoolId || loadConfig().schoolId || 'default';
+  const errs = readErrors();
+  const left = localLeftovers();
+  const bad = Object.keys(errs);
+
+  const rows = DIAG_COLS.map((c) => {
+    const n = list(c).length;
+    // 혼자 쓰는 방식에서는 두 칸이 같은 자료라 나란히 적으면 헷갈린다.
+    const here = (left[c] || []).length;
+    return h('tr', { class: errs[c] ? 'diag-bad' : '' },
+      h('td', {}, labelOf(c)),
+      h('td', { class: 'nowrap' }, errs[c] ? '읽지 못함' : `${n}건`),
+      shared ? h('td', { class: 'nowrap muted' }, here ? `${here}건` : '-') : null);
+  });
+
+  return box('\u{1F50E} 자료 진단', h('div', {},
+    h('p', { class: 'note' },
+      '넣은 자료가 화면에 안 보일 때 여기를 봅니다. ',
+      h('b', {}, '보는 곳'), ' 이 자료를 넣던 때와 같은지 먼저 맞춰보세요.'),
+    h('div', { class: 'ver-row' }, h('span', {}, '저장 방식'),
+      h('code', {}, shared ? '학교 전체 (Firebase)' : '이 컴퓨터에만')),
+    shared ? h('div', { class: 'ver-row' }, h('span', {}, '학교 코드'), h('code', {}, code)) : null,
+    shared ? h('div', { class: 'ver-row' }, h('span', {}, '로그인 계정'), h('code', {}, w.email || '(로그인 안 됨)')) : null,
+    h('div', { class: 'table-wrap' },
+      h('table', { class: 'tbl' },
+        h('thead', {}, h('tr', {},
+          h('th', {}, '자료'),
+          h('th', {}, shared ? '학교 공용' : '이 컴퓨터'),
+          shared ? h('th', {}, '이 컴퓨터에 남은 것') : null)),
+        h('tbody', {}, ...rows))),
+    bad.length
+      ? h('p', { class: 'warn-text' },
+        bad.map(labelOf).join(', '), ' 을(를) 읽지 못했습니다 (',
+        [...new Set(Object.values(errs))].join(', '),
+        '). 파이어스토어 규칙을 확인해 주세요 — docs/SETUP-firebase.md 의 규칙을 통째로 붙여넣으면 됩니다.')
+      : null,
+    shared && code === 'default'
+      ? h('p', { class: 'muted small' },
+        '학교 코드가 ', h('code', {}, 'default'), ' 입니다. [자료 저장 방식] 에서 코드를 바꾸면 ',
+        h('b', {}, '다른 서랍을 보게 되어 자료가 사라진 것처럼 보입니다.'), ' 넣을 때 쓰던 코드와 같아야 합니다.')
+      : null));
 }
 
 function leftoverBox(ctx) {

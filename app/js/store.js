@@ -72,6 +72,12 @@ export async function initStore(cfg) {
 
 export function backendKind() { return backend ? backend.kind : 'none'; }
 
+/** 자료를 어디서 읽고 있는지 — 학교 코드·계정. 혼자 쓰는 방식이면 빈 값이다. */
+export function whereAmI() { return (backend && backend.where) ? backend.where() : {}; }
+
+/** 규칙에 막혀 못 읽은 컬렉션 — { 컬렉션: 사유 }. 없으면 빈 객체다. */
+export function readErrors() { return (backend && backend.readErrors) ? backend.readErrors() : {}; }
+
 // ── 로그인 (Firestore 일 때만 뜻이 있다) ─────────────────────
 /** 구글 로그인 창을 연다. */
 export async function signIn() {

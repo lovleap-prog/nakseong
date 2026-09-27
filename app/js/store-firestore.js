@@ -26,6 +26,9 @@ export async function createFirestoreBackend(cfg) {
   let stopMe = null;       // 내 명단 문서 구독 해제 함수
   let stopShared = [];     // 공용 자료 구독 해제 함수들
   let watching = false;    // 공용 자료를 지금 보고 있는가
+  // 컬렉션마다 마지막 읽기 실패. 규칙에 막히면 화면이 '자료 없음' 과 똑같아 보여서,
+  // 콘솔을 열지 않으면 무엇이 잘못됐는지 알 수가 없었다.
+  const readErr = {};
 
   /**
    * 본인 것만 보는 컬렉션. 문서 번호가 그 사람의 uid 다.
@@ -135,8 +138,13 @@ export async function createFirestoreBackend(cfg) {
     for (const c of shared) {
       const stop = dbMod.onSnapshot(base(c), (snap) => {
         cache[c] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        delete readErr[c];
         emit(c);
-      }, (err) => console.error('[firestore]', c, err));
+      }, (err) => {
+        console.error('[firestore]', c, err);
+        readErr[c] = err.code || err.message || '읽기 실패';
+        emit(c); emit('readerr');
+      });
       stopShared.push(stop);
     }
   }
@@ -160,6 +168,9 @@ export async function createFirestoreBackend(cfg) {
   return {
     kind: 'firestore',
     signIn,
+    // '자료가 어디에 있나' 를 한 화면에서 답하기 위한 것들
+    where: () => ({ schoolId, uid: auth.currentUser ? auth.currentUser.uid : '', email: auth.currentUser ? auth.currentUser.email : '', watching }),
+    readErrors: () => ({ ...readErr }),
     signOut: () => authMod.signOut(auth),
     // 로그인 여부가 정해질 때까지만 기다린다. 자료는 승인된 뒤에 들어온다.
     async ready() { firstLoad = firstAuth(); await firstLoad; },

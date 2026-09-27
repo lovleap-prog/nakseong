@@ -1374,3 +1374,6 @@ body.widget .widget-body { padding-bottom: 16px; }
 .month-pop-item { font-size: 12px; line-height: 1.4; white-space: normal; }
 .month-pop-time { color: var(--muted); margin-right: 5px; font-size: 11px; }
 .month-pop-pend { margin-left: 5px; font-size: 10.5px; color: var(--warn, #b7791f); }
+
+/* 자료 진단 — 못 읽은 줄은 눈에 띄게 */
+.diag-bad td { color: var(--danger); font-weight: 600; }
