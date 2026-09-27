@@ -68,6 +68,25 @@ export function clear(el) { while (el.firstChild) el.removeChild(el.firstChild);
 
 export function mount(el, ...children) { clear(el); append(el, children); return el; }
 
+/**
+ * 바깥을 눌러 창 닫기 — **누르기와 떼기가 모두 바깥일 때만.**
+ *
+ * 여태는 click 하나만 봤다. 그런데 브라우저는 누른 자리와 뗀 자리의 '공통 조상' 에
+ * click 을 보낸다. 칸 안에서 글자를 드래그해 고르다 손이 창 밖에서 떨어지면 그 조상이
+ * 곧 바탕이라, 적던 내용이 통째로 사라졌다. 담당·세부 내용을 적다 여러 번 겪은 일이다.
+ */
+function closeOnBackdrop(back, close) {
+  let downOnBack = false;
+  back.addEventListener('mousedown', (e) => { downOnBack = e.target === back; });
+  back.addEventListener('touchstart', (e) => { downOnBack = e.target === back; }, { passive: true });
+  back.addEventListener('click', (e) => {
+    const was = downOnBack;
+    downOnBack = false;
+    if (was && e.target === back) close();
+  });
+  return back;
+}
+
 /** 간단한 토스트 알림 */
 export function toast(msg, kind = 'info') {
   let host = $('#toast-host');
@@ -81,12 +100,13 @@ export function toast(msg, kind = 'info') {
 export function confirmDialog(message, { okText = '확인', cancelText = '취소', danger = false } = {}) {
   return new Promise((resolve) => {
     const close = (v) => { back.remove(); resolve(v); };
-    const back = h('div', { class: 'modal-back', onClick: (e) => { if (e.target === back) close(false); } },
+    const back = h('div', { class: 'modal-back' },
       h('div', { class: 'modal modal-sm' },
         h('p', { class: 'modal-msg' }, message),
         h('div', { class: 'modal-actions' },
           h('button', { class: 'btn', onClick: () => close(false) }, cancelText),
           h('button', { class: `btn ${danger ? 'btn-danger' : 'btn-primary'}`, onClick: () => close(true) }, okText))));
+    closeOnBackdrop(back, () => close(false));
     document.body.appendChild(back);
   });
 }
@@ -96,26 +116,34 @@ export function promptDialog(message, { placeholder = '', okText = '확인' } = 
   return new Promise((resolve) => {
     const input = h('textarea', { class: 'input', rows: 3, placeholder });
     const close = (v) => { back.remove(); resolve(v); };
-    const back = h('div', { class: 'modal-back', onClick: (e) => { if (e.target === back) close(null); } },
+    const back = h('div', { class: 'modal-back' },
       h('div', { class: 'modal modal-sm' },
         h('p', { class: 'modal-msg' }, message), input,
         h('div', { class: 'modal-actions' },
           h('button', { class: 'btn', onClick: () => close(null) }, '취소'),
           h('button', { class: 'btn btn-primary', onClick: () => close(input.value.trim()) }, okText))));
+    closeOnBackdrop(back, () => close(null));
     document.body.appendChild(back);
     setTimeout(() => input.focus(), 30);
   });
 }
 
 /** 큰 모달 (미리보기 등) */
-export function openModal(title, bodyNode, actions = []) {
+export function openModal(title, bodyNode, actions = [], { confirmClose } = {}) {
   const close = () => back.remove();
-  const back = h('div', { class: 'modal-back', onClick: (e) => { if (e.target === back) close(); } },
+  // 적다 만 것이 있으면 한 번 물어본다. 실수로 바깥을 눌러 십 분치 입력이 날아가면
+  // 다시 적을 마음이 안 난다.
+  const tryClose = async () => {
+    if (confirmClose && !(await confirmClose())) return;
+    close();
+  };
+  const back = h('div', { class: 'modal-back' },
     h('div', { class: 'modal' },
-      h('div', { class: 'modal-head' }, h('h3', {}, title), h('button', { class: 'icon-btn', title: '닫기', onClick: close }, '✕')),
+      h('div', { class: 'modal-head' }, h('h3', {}, title), h('button', { class: 'icon-btn', title: '닫기', onClick: tryClose }, '✕')),
       h('div', { class: 'modal-body' }, bodyNode),
       h('div', { class: 'modal-actions' }, ...actions.map((a) =>
         h('button', { class: `btn ${a.class || ''}`, onClick: () => a.onClick(close) }, a.label)))));
+  closeOnBackdrop(back, tryClose);
   document.body.appendChild(back);
   return close;
 }

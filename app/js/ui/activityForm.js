@@ -1,5 +1,5 @@
 // 일정 입력/수정 모달. 교사가 쓰면 '확인 대기', 관리자가 쓰면 바로 승인 가능.
-import { h, openModal, toast } from '../lib/dom.js';
+import { h, openModal, toast, confirmDialog } from '../lib/dom.js';
 import { CATEGORY, STATUS, newActivity, today, fmtK, parseYmd, range } from '../model.js';
 import { put, audit, currentUser, isAdmin } from '../store.js';
 import { bellList, clashReasons } from '../conflict.js';
@@ -87,6 +87,12 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
     isAdmin() ? h('div', { class: 'span2' }, field('처리 상태', statusSel, '관리자만 변경할 수 있습니다.')) : null,
   );
 
+  // 적은 것이 있는지 본다. 빈 창을 닫을 때까지 물어보면 그것대로 성가시다.
+  const snapshot = () => JSON.stringify([...Object.keys(inp).map((k) => inp[k].value), detail.value,
+    catSel.value, bellSel.value, busChk.checked, busNote.value, multiChk.checked]);
+  let saved = false;
+  const at0 = snapshot();
+
   const close = openModal(isNew ? '교육활동 추가' : '교육활동 수정', body, [
     { label: '취소', onClick: (c) => c() },
     {
@@ -132,12 +138,16 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
 
         await put('activities', a);
         await audit(isNew ? '등록' : '수정', a.id, before, a);
+        saved = true;
         toast(isNew ? (isAdmin() ? '등록했습니다.' : '제출했습니다. 관리자 확인을 기다립니다.') : '저장했습니다.', 'ok');
         c();
         if (onSaved) onSaved(a);
       },
     },
-  ]);
+  ], {
+    confirmClose: async () => saved || snapshot() === at0
+      || confirmDialog('적으신 내용이 저장되지 않았습니다. 창을 닫을까요?', { danger: true, okText: '닫기' }),
+  });
   // 날짜·시간·장소·대상·담당이 바뀔 때마다 다시 본다.
   const checkAhead = () => {
     const date = inp.date.value;
