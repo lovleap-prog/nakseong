@@ -1,6 +1,6 @@
 // 앱 진입점 — 탭 전환, 헤더, 첫 실행 안내, 위젯 모드
 import { h, mount, clear, toast, openModal, confirmDialog } from './lib/dom.js';
-import { loadConfig } from './config.js';
+import { loadConfig, saveConfig, DEFAULTS } from './config.js';
 import { effectiveLinks } from './links.js';
 import {
   initStore, on, loadSavedUser, currentUser, setUser, isAdmin, backendKind,
@@ -85,6 +85,33 @@ function catchSilentFailures() {
   window.addEventListener('error', (e) => { if (e.error) say(e.error); });
 }
 
+/**
+ * '지금 이 컴퓨터에만 저장되고 있다' 를 늘 보이게 하는 띠.
+ *
+ * 학교 전체로 쓰기로 해 둔 앱인데 이 브라우저만 혼자 저장으로 돌고 있으면, 적는 사람은
+ * 알 길이 없다. 화면은 똑같고 저장도 되니까. 그러다 다른 컴퓨터에서 열어 보고 나서야
+ * '자료가 사라졌다' 고 한다. 사라진 게 아니라 그 컴퓨터에만 있었던 것이다.
+ * 연결이 끊겨 갈아탄 경우엔 토스트 하나가 3초 떴다 사라질 뿐이었다. 그래서 띠로 세운다.
+ */
+function localOnlyBar() {
+  const meant = DEFAULTS.backend === 'firestore' && !!(DEFAULTS.firebase || {}).apiKey;
+  if (!meant || backendKind() === 'firestore') return null;
+  return h('div', { class: 'local-bar', role: 'alert' },
+    h('span', { class: 'local-bar-ico' }, '\u26A0'),
+    h('span', {},
+      h('b', {}, '지금 이 컴퓨터에만 저장됩니다.'),
+      ' 여기서 적은 것은 다른 선생님께 보이지 않습니다.'),
+    h('button', {
+      class: 'btn btn-sm btn-primary',
+      onClick: () => {
+        const c = loadConfig();
+        c.backend = 'firestore';
+        saveConfig(c);
+        location.reload();
+      },
+    }, '학교 전체로 연결'));
+}
+
 async function boot() {
   catchSilentFailures();
   loadSavedUser();
@@ -95,7 +122,8 @@ async function boot() {
     if (kind === 'firestore') document.body.classList.add('online');
   } catch (e) {
     console.error(e);
-    toast('저장소 연결에 실패해 이 컴퓨터 저장으로 전환했습니다.', 'warn');
+    // 갈아탄 것을 설정에 저장하지는 않는다. 다음에 열 때 다시 학교 전체로 붙어야 한다.
+    toast('학교 서버에 연결하지 못했습니다. 이 컴퓨터 저장으로 엽니다.', 'warn');
     await initStore({ ...cfg, backend: 'local' });
   }
 
@@ -336,15 +364,15 @@ function renderWidget() {
 
 function render() {
   syncHash();
-  if (isWidget) { mount(app, renderWidget()); return; }
+  if (isWidget) { mount(app, localOnlyBar(), renderWidget()); return; }
   // 학교 전체가 함께 쓰는 방식일 때는 로그인과 승인을 먼저 지난다.
   const gate = authGate();
-  if (gate) { mount(app, header({ bare: true }), h('main', { class: 'main' }, gate)); return; }
+  if (gate) { mount(app, localOnlyBar(), header({ bare: true }), h('main', { class: 'main' }, gate)); return; }
 
   // 주소창이나 예전 바로가기로 관리 탭에 들어온 교사는 일일로 돌려보낸다.
   if (!visibleTabs().some(([k]) => k === state.tab)) { state.tab = 'daily'; syncHash(); }
   const tab = TABS.find(([k]) => k === state.tab) || TABS[0];
-  mount(app, header(), h('main', { class: 'main' }, tab[2](ctx)), memoDock(), bottomNav());
+  mount(app, localOnlyBar(), header(), h('main', { class: 'main' }, tab[2](ctx)), memoDock(), bottomNav());
 }
 
 // 아래 탭바의 선 그림. 글자만으로는 엄지로 누를 자리가 작다.

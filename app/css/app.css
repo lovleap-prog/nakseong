@@ -282,7 +282,9 @@ textarea.input { resize: vertical; line-height: 1.6; }
 .modal-sm .modal-actions { border-top: none; padding: 14px 0 0; }
 
 /* ── 토스트 ─────────────────────────── */
-#toast-host { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 200; align-items: center; }
+/* 알림 쪽지는 지나가는 글일 뿐이므로 마우스를 가로채지 않는다.
+   붙여넣기 쪽지가 휴지통을 덮고 있어서, 바로 이어서 칸을 끌어다 버리면 안 먹혔다. */
+#toast-host { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 200; align-items: center; pointer-events: none; }
 .toast { background: #222a35; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 13.5px; box-shadow: 0 6px 20px rgba(0,0,0,.25); max-width: 88vw; }
 .toast-ok { background: #17663a; }
 .toast-warn { background: #9a3412; }
@@ -1385,3 +1387,14 @@ body.widget .widget-body { padding-bottom: 16px; }
   background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
   border-radius: 8px;
 }
+
+/* 이 컴퓨터에만 저장 중 — 늘 보이는 띠 */
+.local-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 16px; font-size: 13.5px;
+  background: var(--warn-bg); color: var(--text);
+  border-bottom: 2px solid var(--warn);
+}
+.local-bar-ico { color: var(--warn); font-size: 15px; }
+.local-bar .btn { margin-left: auto; }
+@media print { .local-bar { display: none; } }
