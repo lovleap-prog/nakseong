@@ -21,6 +21,17 @@
  *  - 나온 /exec 주소를 앱 [불러오기] 탭의 '구글시트에서 가져오기' 에 넣는다
  */
 
+/**
+ * 열쇠말 — 비워 두면 주소만 알면 누구나 읽는다.
+ *
+ * 웹앱을 '모든 사용자' 로 배포해야 앱이 읽을 수 있는데(로그인 정보가 실리지 않는다),
+ * 그러면 주소가 새는 순간 담당 선생님 이름까지 딸려 나간다. 여기에 아무 말이나
+ * 적어 두고, 앱에는 주소 뒤에 ?key=그말 을 붙여 넣으면 그 말을 아는 쪽만 읽는다.
+ *   예) var READ_KEY = 'nakseong2026';
+ *       https://script.google.com/macros/s/.../exec?key=nakseong2026
+ */
+var READ_KEY = '';
+
 var SHEET_OUT = '정리됨';
 var HEADERS = ['날짜', '종료일', '시간', '활동명', '대상', '장소', '담당', '부서', '비고'];
 
@@ -251,6 +262,12 @@ function normalizeFreeGrid(values, year) {
 // ── 웹앱 ────────────────────────────────────────────────────
 /** 앱의 '구글시트에서 가져오기' 가 이 주소를 부른다. */
 function doGet(e) {
+  var given = (e && e.parameter && e.parameter.key) || '';
+  if (READ_KEY && given !== READ_KEY) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, rows: [], error: '열쇠말이 맞지 않습니다. 주소 끝에 ?key=… 를 붙여주세요.' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var name = (e && e.parameter && e.parameter.sheet) || SHEET_OUT;
   var sh = ss.getSheetByName(name);
