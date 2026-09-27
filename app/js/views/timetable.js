@@ -7,7 +7,7 @@ import { h, openModal, toast, confirmDialog, clear } from '../lib/dom.js';
 import { parseTimetableGrid, parseTimetableLines, parsePastedGrid } from '../lib/ttparse.js';
 import { readHwpx } from '../lib/hwpx-read.js';
 import { readXlsx } from '../lib/xlsx-read.js';
-import { WEEKDAY, newSlot, weekStart, addDays, fmtK, range, today } from '../model.js';
+import { WEEKDAY, newSlot, weekStart, addDays, fmtK, range, today, parseYmd } from '../model.js';
 import { holidayOn } from '../lib/holidays.js';
 import { list, put, putMany, remove, isAdmin, audit } from '../store.js';
 import { periodTable, clashReasons } from '../conflict.js';
@@ -174,6 +174,10 @@ export function renderTimetable(ctx) {
         h('button', { class: 'btn btn-sm', onClick: () => { clip = null; refresh(); } }, '복사 끝내기'))
       : null,
 
+    // 빈 주를 보고 '자료가 사라졌다' 고 하신 일이 있다. 일요일에 열면 방금 끝난 주가 뜨는데
+    // 시간표는 다음 주에 넣어 두신 것이었다. 어느 주에 들어 있는지 짚고 바로 건너뛰게 한다.
+    nearbyWeekHint(wk, slots.length, ctx),
+
     h('p', { class: 'note' },
       admin
         ? '칸을 눌러 과목·특별실을 넣으세요. 넣은 칸은 끌어서 다른 요일·교시로 옮길 수 있습니다. 교육활동·반복일정과 시간이 겹치면 빨갛게 표시됩니다.'
@@ -195,6 +199,22 @@ export function renderTimetable(ctx) {
       : null,
 
     clashTotal ? clashList(clash, slots, wk) : null);
+}
+
+/** 이 주가 비었을 때, 시간표가 들어 있는 가장 가까운 주를 알려준다. */
+function nearbyWeekHint(wk, count, ctx) {
+  if (count) return null;
+  const weeks = [...new Set(list('timetable').map((s2) => s2.week))].filter(Boolean);
+  if (!weeks.length) return null;
+  const near = weeks
+    .map((w) => [w, Math.abs(Math.round((parseYmd(w) - parseYmd(wk)) / 86400000))])
+    .sort((a, b) => a[1] - b[1])[0][0];
+  const n = list('timetable').filter((s2) => s2.week === near).length;
+  return h('div', { class: 'week-hint' },
+    h('span', {},
+      '이 주에는 시간표가 없습니다. ',
+      h('b', {}, `${fmtK(near, { weekday: false })} 주`), `에 ${n}칸이 들어 있습니다.`),
+    h('button', { class: 'btn btn-sm', onClick: () => ctx.setDate(near) }, '그 주 보기'));
 }
 
 const fmtMin = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;

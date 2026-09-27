@@ -1377,3 +1377,11 @@ body.widget .widget-body { padding-bottom: 16px; }
 
 /* 자료 진단 — 못 읽은 줄은 눈에 띄게 */
 .diag-bad td { color: var(--danger); font-weight: 600; }
+
+/* 빈 주 안내 — 시간표가 어느 주에 들어 있는지 */
+.week-hint {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 8px 0; padding: 8px 12px; font-size: 13px;
+  background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: 8px;
+}

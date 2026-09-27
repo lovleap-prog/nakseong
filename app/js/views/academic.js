@@ -49,8 +49,20 @@ export function vacationRanges(rows) {
 
 const vacationOn = (ranges, d) => (ranges.find((v) => d >= v.from && d <= v.to) || {}).name || '';
 
+/** 처음 열 때 보여줄 학기. 3~8월은 1학기, 9~2월은 2학기. 비어 있으면 자료가 있는 쪽. */
+function openingTerm() {
+  const mon = Number(today().slice(5, 7));
+  const guess = mon >= 3 && mon <= 8 ? '1' : '2';
+  const rows = list('academic').filter((a) => a.kind !== 'stat');
+  const has = (t) => rows.some((a) => a.term === t);
+  if (has(guess) || !rows.length) return guess;
+  return has(guess === '1' ? '2' : '1') ? (guess === '1' ? '2' : '1') : guess;
+}
+
 export function renderAcademic(ctx) {
-  const st = ctx.state.acad || (ctx.state.acad = { term: '1', q: '', view: 'cal' });
+  // 늘 1학기로 열려서, 2학기에 들어가면 자료가 있어도 빈 화면이 보였다.
+  // 오늘이 속한 학기로 열고, 그 학기가 비어 있으면 자료가 있는 쪽으로 연다.
+  const st = ctx.state.acad || (ctx.state.acad = { term: openingTerm(), q: '', view: 'cal' });
   if (!st.view) st.view = 'cal';
   const admin = isAdmin();
   const refresh = () => ctx.refresh();
