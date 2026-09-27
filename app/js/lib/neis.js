@@ -1,6 +1,7 @@
 // 나이스 일일교육활동 결재용 문구 · 메신저 안내문 생성
 import { fmtK, byTime, WEEKDAY, parseYmd, CATEGORY } from '../model.js';
 import { describeTime, dayBellId, bellById, defaultBell } from '../conflict.js';
+import { isNoMeal } from '../select.js';
 
 const KO_ORDER = ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차', '카', '타', '파', '하'];
 const koIdx = (i) => (i < KO_ORDER.length ? KO_ORDER[i] : `${KO_ORDER[i % 14]}${Math.floor(i / 14) + 1}`);
@@ -30,6 +31,8 @@ export function neisApprovalText(p) {
   L.push(`${fmtK(date)} 일일교육활동 계획`);
   const dayBell = bellById(dayBellId(date));
   if (dayBell && dayBell.id !== defaultBell().id) L.push(`※ ${dayBell.name} 운영`);
+  // 급식이 없는 날은 기안에 한 줄 적어 둔다. 놓치면 그 날 아이들 점심이 걸린다.
+  if (isNoMeal(date)) L.push('※ 비급식일 (급식 미실시)');
   L.push('');
 
   let sec = 1;
@@ -74,6 +77,7 @@ export function messengerText(p) {
   L.push(`[일일교육활동 안내] ${d.getMonth() + 1}/${d.getDate()}(${WEEKDAY[d.getDay()]})`);
   const mBell = bellById(dayBellId(date));
   if (mBell && mBell.id !== defaultBell().id) L.push(`※ 오늘은 ${mBell.name} 입니다.`);
+  if (isNoMeal(date)) L.push('※ 오늘은 비급식일입니다. (급식 없음)');
   L.push('');
   L.push('▷ 오늘의 교육활동');
   const sorted = activities.slice().sort(byTime);

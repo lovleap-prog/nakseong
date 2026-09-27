@@ -4,6 +4,16 @@ import { expandRecurring, afterSchoolOn, occursOn, byTime, range, weekStart, dow
 import { findClashes } from './conflict.js';
 import { holidayOn } from './lib/holidays.js';
 
+/**
+ * 그 날이 비급식일인가. 학사일정 탭에 넣어 둔 것을 본다.
+ *
+ * 여태 비급식일은 학사일정 화면과 월중계획 한글 문서에만 있었다. 정작 날마다 보는
+ * 일일·주간·월간 화면에는 없어서, 급식이 없는 날을 문서를 열어야 알 수 있었다.
+ */
+export function isNoMeal(date) {
+  return list('academic').some((a) => a.kind === 'nomeal' && a.date === date);
+}
+
 export function activitiesOn(date, { onlyApproved = false } = {}) {
   return list('activities')
     .filter((a) => occursOn(a, date))

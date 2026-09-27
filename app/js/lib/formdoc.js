@@ -220,6 +220,9 @@ export function weeklyForm(from, to, { timetable = true } = {}) {
     { kind: 'title', text: `${label} 주요 교육활동` },
     { kind: 'table', table: main },
   ];
+  // 비급식일은 학교 서식에 칸이 따로 없다. 칸을 늘리면 결재 서식이 달라지니 표 밑에 한 줄로 적는다.
+  const meals = noMealIn(from, addDays(from, 6));
+  if (meals) blocks.push({ kind: 'small', text: `※ 비급식일: ${meals}` });
   if (notice) blocks.push({ kind: 'small', text: `※ ${notice.replace(/\n/g, ' ')}` });
   if (timetable && !tt.empty) {
     blocks.push({ kind: 'title', text: `${label} 교과교담` });
@@ -227,6 +230,15 @@ export function weeklyForm(from, to, { timetable = true } = {}) {
     blocks.push({ kind: 'table', table: tt });
   }
   return { title: `${label} 주요 교육활동${cfg.school.name ? ` - ${cfg.school.name}` : ''}`, label, blocks };
+}
+
+/** 그 주의 비급식일을 '10.2.(금)' 꼴로 이어 붙인다. 없으면 빈 글. */
+function noMealIn(from, to) {
+  const days = new Set(list('academic').filter((a) => a.kind === 'nomeal' && a.date).map((a) => a.date));
+  return range(from, to).filter((d) => days.has(d)).map((d) => {
+    const dt = parseYmd(d);
+    return `${dt.getMonth() + 1}.${dt.getDate()}.(${WEEKDAY[dt.getDay()]})`;
+  }).join(', ');
 }
 
 // ── 월중(월간) 교육활동계획 ──────────────────────────────────

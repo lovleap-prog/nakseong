@@ -4,7 +4,7 @@ import {
   CATEGORY, STATUS, WEEKDAY, fmtK, today, addDays, addMonths,
   weekStart, sundayStart, monthStart, monthEnd, range, parseYmd, isWeekend, ymd, occursOn,
 } from '../model.js';
-import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashesOn, timetableOn } from '../select.js';
+import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashesOn, timetableOn, isNoMeal } from '../select.js';
 import { clashLabel, bellList, defaultBell, bellById, dayBellId, bellFor, describeTime } from '../conflict.js';
 import { openActivityForm } from '../ui/activityForm.js';
 import { canDelete, deleteOrRequest, delTitle } from '../del.js';
@@ -441,6 +441,13 @@ export function renderDaily(ctx) {
       ],
     }),
 
+    // 급식이 없는 날은 그 날 화면에서 바로 보여야 한다. 문서를 열어야 아는 것이 아니라.
+    isNoMeal(d)
+      ? h('div', { class: 'nomeal-bar' },
+        h('span', { class: 'nomeal-ico' }, '\u{1F37D}'),
+        h('div', {}, h('b', {}, '비급식일'), ' — 이 날은 급식이 없습니다.'))
+      : null,
+
     (() => {
       const off = holidayOn(d);
       return off
@@ -621,6 +628,7 @@ export function renderWeekly(ctx) {
           h('span', { class: 'week-dow' }, WEEKDAY[parseYmd(day).getDay()]),
           h('span', { class: 'week-date' }, parseYmd(day).getDate()),
           off ? h('span', { class: 'week-off' }, off) : null,
+          isNoMeal(day) ? h('span', { class: 'nomeal-tag', title: '비급식일 — 급식 없음' }, '\u{1F37D} 비급식') : null,
           pend ? h('span', { class: 'dot-pending', title: `확인 대기 ${pend}건` }, pend) : null),
         h('div', { class: 'week-body' },
           ...acts.map((a) => activityCard(a, { compact: true, onChange: rerender, checkDate: day })),
@@ -703,6 +711,7 @@ export function renderMonthly(ctx) {
           },
             h('span', { class: 'month-num' }, parseYmd(day).getDate()),
             off ? h('span', { class: 'month-off', title: off }, off) : null,
+            isNoMeal(day) ? h('span', { class: 'nomeal-tag sm', title: '비급식일 — 급식 없음' }, '\u{1F37D} 비급식') : null,
             lanes ? h('span', { class: 'month-bandspace' }) : null,
             ...acts.slice(0, 3).map((a) => makeDraggable(h('span', {
               class: `month-item cat-${a.category}${a.status === 'pending' ? ' is-pending' : ''}`
