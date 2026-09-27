@@ -57,6 +57,9 @@ function strictHit(activity, staff) {
 
 const RULE_WEIGHT = 1.0;
 const CASE_WEIGHT = 0.8;
+// 선생님이 미리보기에서 손수 고쳐 등록한 것. 짐작이 아니라 답이라서 더 믿는다.
+const FIXED_WEIGHT = 1.15;
+export const FIXED_SOURCE = '고친 내용';
 const CASE_FLOOR = 0.45;      // 이만큼은 닮아야 같은 활동으로 친다
 const WEAK_FIELD = 0.5;       // 장소·대상에서 걸린 근거는 절반만 인정한다
 const SUGGEST_FLOOR = 0.35;   // 이보다 낮으면 아무 말도 하지 않는다
@@ -82,8 +85,8 @@ export function matchSources() {
   const staff = list('staff').filter((s) => s.active !== false && s.name);
   const lessons = list('lessons').filter((l) => l.title && (l.owner || l.dept));
   const fromActivities = list('activities')
-    .filter((a) => a.title && (a.owner || a.dept) && a.status === 'approved')
-    .map((a) => ({ title: a.title, owner: a.owner, dept: a.dept, count: 1, source: '등록된 일정' }));
+    .filter((a) => a.title && (a.owner || a.dept || a.category) && a.status === 'approved')
+    .map((a) => ({ title: a.title, owner: a.owner, dept: a.dept, category: a.category, count: 1, source: '등록된 일정' }));
   return { staff, lessons: lessons.concat(fromActivities) };
 }
 
@@ -144,8 +147,10 @@ export function suggestOwner(activity, sources = matchSources()) {
   }
   for (const [, { sim, lesson }] of best) {
     const repeat = Math.min(1.3, 1 + Math.log10(Math.max(1, lesson.count || 1)));
-    add(lesson.owner, lesson.dept, CASE_WEIGHT * sim * repeat,
-      `과거 '${lesson.title}'${sim >= 0.95 ? '' : ` (${Math.round(sim * 100)}% 유사)`}`);
+    const w = lesson.source === FIXED_SOURCE ? FIXED_WEIGHT : CASE_WEIGHT;
+    const what = lesson.source === FIXED_SOURCE ? '고쳐둔' : '과거';
+    add(lesson.owner, lesson.dept, w * sim * repeat,
+      `${what} '${lesson.title}'${sim >= 0.95 ? '' : ` (${Math.round(sim * 100)}% 유사)`}`);
   }
 
   const ranked = [...cand.values()].sort((a, b) => b.score - a.score);
@@ -175,6 +180,11 @@ export function fillOwners(rows, { overwrite = false } = {}) {
   let filled = 0;
   let hinted = 0;
   for (const r of rows) {
+    // 분류도 배운 대로 잡아준다. 사람이 이미 고쳐 둔 줄은 건드리지 않는다.
+    if (!r._catTouched) {
+      const cat = suggestCategory(r.title, sources);
+      if (cat && cat.category !== r.category) { r.category = cat.category; r._catFrom = cat; }
+    }
     // '콕 집어' 규칙은 이미 채워진 칸도 바로잡는다. 그러라고 콕 집어 둔 것이다.
     const pre = suggestOwner(r, sources);
     const strict = pre && pre.strict;
@@ -193,6 +203,28 @@ export function fillOwners(rows, { overwrite = false } = {}) {
   return { filled, hinted };
 }
 
+/**
+ * 분류 추천 — 고쳐서 등록한 것을 기억해 뒀다가 같은 활동이 오면 그대로 잡는다.
+ *
+ * 담당자와 달리 분류는 여섯 가지뿐이라 같은 활동명이면 거의 늘 같다.
+ * 그래서 닮은 사례들의 분류를 세어 가장 많은 쪽을 쓴다.
+ */
+export function suggestCategory(title, sources = matchSources()) {
+  if (!String(title || '').trim()) return null;
+  const score = new Map();
+  for (const l of sources.lessons) {
+    if (!l.category) continue;
+    const sim = similarity(title, l.title);
+    if (sim < 0.5) continue;
+    const w = sim * Math.min(3, l.count || 1) * (l.source === FIXED_SOURCE ? 1.5 : 1);
+    score.set(l.category, (score.get(l.category) || 0) + w);
+  }
+  if (!score.size) return null;
+  const ranked = [...score.entries()].sort((a, b) => b[1] - a[1]);
+  if (ranked[0][1] < 0.5) return null;
+  return { category: ranked[0][0], score: Math.round(ranked[0][1] * 100) / 100 };
+}
+
 /** 과거 계획에서 뽑은 (활동명, 담당자) 쌍을 사례로 쌓는다. 같은 쌍은 횟수만 올린다. */
 export function mergeLessons(existing, pairs, source = '') {
   const byKey = new Map();
@@ -204,11 +236,19 @@ export function mergeLessons(existing, pairs, source = '') {
     const title = String(p.title || '').trim();
     const owner = String(p.owner || '').trim();
     const dept = String(p.dept || '').trim();
-    if (!title || (!owner && !dept)) continue;
+    const category = String(p.category || '').trim();
+    // 분류만 고친 것도 배울 거리다. 담당자가 비어 있어도 기억한다.
+    if (!title || (!owner && !dept && !category)) continue;
     const key = `${title}|${owner}|${dept}`;
     const hit = byKey.get(key);
-    if (hit) { hit.count = (hit.count || 1) + 1; bumped++; }
-    else { byKey.set(key, { title, owner, dept, count: 1, source }); added++; }
+    if (hit) {
+      hit.count = (hit.count || 1) + 1;
+      if (category) hit.category = category;
+      bumped++;
+    } else {
+      byKey.set(key, { title, owner, dept, category, count: 1, source });
+      added++;
+    }
   }
   return { rows: [...byKey.values()], added, bumped };
 }

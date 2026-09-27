@@ -97,7 +97,7 @@ export function extractDate(line, year, curMonth) {
     return { start, end: end > start ? end : '', rest: strip(line, m) };
   }
   // 9/22 · 9.22 · 9월 22일  (기간 지원)
-  m = line.match(/(?:^|[\s([{])(\d{1,2})\s*[/.월]\s*(\d{1,2})\s*일?(?!\s*(?:학년|반|교시|명|층|회|번|시간|주|개))\s*(?:[~-]\s*(?:(\d{1,2})\s*[/.월]\s*)?(\d{1,2})\s*일?)?/);
+  m = line.match(/(?:^|[\s([{])(\d{1,2})\s*[/.월]\s*(\d{1,2})\s*일?(?!\s*(?:학년|반|교시|명|층|회|번|시간|주|개)(?![가-힣]))\s*(?:[~-]\s*(?:(\d{1,2})\s*[/.월]\s*)?(\d{1,2})\s*일?)?/);
   if (m) {
     const mo = Number(m[1]), da = Number(m[2]);
     if (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) {

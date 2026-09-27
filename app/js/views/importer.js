@@ -5,8 +5,10 @@ import { CATEGORY, newActivity, newAfterSchool, today, WEEKDAY } from '../model.
 import { parseFreeText, parseTable, findMonthContext } from '../lib/textparse.js';
 import { readHwpx } from '../lib/hwpx-read.js';
 import { readXlsx } from '../lib/xlsx-read.js';
-import { putMany, audit, currentUser, isAdmin } from '../store.js';
-import { fillOwners, suggestOwner, matchSources, AUTO_FILL_FLOOR } from '../matcher.js';
+import { putMany, audit, currentUser, isAdmin, list } from '../store.js';
+import { fillOwners, suggestOwner, matchSources, AUTO_FILL_FLOOR, mergeLessons, FIXED_SOURCE } from '../matcher.js';
+import { newLesson } from '../model.js';
+import { looksLikeHoliday } from '../lib/holidays.js';
 import { confCls, confLabel } from './staffbox.js';
 
 const FIELDS = [
@@ -52,7 +54,9 @@ export function renderImporter(ctx) {
   };
 
   const setRows = (rows, source) => {
-    st.rows = rows.map((r) => ({ ...r, _include: true }));
+    // 재량휴업일·개천절 같은 줄은 교육활동이 아니라 학사일정이다.
+    // 체크를 꺼 두기만 한다. 지우지 않는 것은, 학교에 따라 그 날 돌봄을 적기도 해서다.
+    st.rows = rows.map((r) => ({ ...r, _include: !looksLikeHoliday(r.title) }));
     st.source = source;
     // 업무분장표와 과거 사례로 담당자를 채운다. 확신이 낮으면 제안만 남는다.
     const { filled, hinted } = fillOwners(st.rows);
@@ -61,7 +65,9 @@ export function renderImporter(ctx) {
     const extra = filled || hinted
       ? ` 담당자 ${filled}건 자동 입력${hinted ? `, ${hinted}건 제안` : ''}.`
       : '';
-    toast(`${rows.length}건을 읽었습니다.${extra} 내용을 확인한 뒤 등록하세요.`, 'ok');
+    const off = st.rows.filter((r) => !r._include).length;
+    const offNote = off ? ` 쉬는 날 ${off}건은 체크를 꺼 두었습니다(학사일정 탭에서 올리세요).` : '';
+    toast(`${rows.length}건을 읽었습니다.${extra}${offNote} 내용을 확인한 뒤 등록하세요.`, 'ok');
   };
 
   const handleFile = async (file) => {
@@ -130,6 +136,8 @@ export function renderImporter(ctx) {
 
     const needDate = st.rows.filter((r) => r._include && !r.date).length;
     const autoApprove = h('input', { type: 'checkbox', checked: isAdmin() });
+    // 손으로 고친 담당·계·분류를 기억해 둔다. 다음에 같은 활동이 오면 그대로 잡는다.
+    const learn = h('input', { type: 'checkbox', checked: true });
 
     preview.appendChild(h('div', { class: 'submit-bar' },
       needDate && !asMode ? h('span', { class: 'warn-text' }, `날짜가 비어 있는 행이 ${needDate}건 있습니다.`) : null,
@@ -143,6 +151,10 @@ export function renderImporter(ctx) {
         },
       }, '담당자 다시 채우기') : null,
       isAdmin() ? h('label', { class: 'check' }, autoApprove, '등록과 동시에 승인') : null,
+      !asMode ? h('label', {
+        class: 'check',
+        title: '활동명 → 담당·계·분류 를 기억합니다. [설정] → 담당자 자동 매칭에서 지울 수 있습니다.',
+      }, learn, '고친 내용 기억하기') : null,
       h('button', {
         class: 'btn btn-primary',
         onClick: async () => {
@@ -177,7 +189,9 @@ export function renderImporter(ctx) {
             }));
             await putMany('activities', acts);
             await audit('일괄등록', `${acts.length}건`, null, { count: acts.length, source: st.source, approved: approve });
-            toast(approve ? `${acts.length}건을 등록·승인했습니다.` : `${acts.length}건을 제출했습니다. ${admin ? '승인함' : '[내 제출]'}에서 확인하세요.`, 'ok');
+            const learned = learn.checked ? await learnFromRows(rows) : 0;
+            const learnNote = learned ? ` 담당·분류 ${learned}가지를 기억했습니다.` : '';
+            toast((approve ? `${acts.length}건을 등록·승인했습니다.` : `${acts.length}건을 제출했습니다. ${admin ? '승인함' : '[내 제출]'}에서 확인하세요.`) + learnNote, 'ok');
             ctx.go(approve ? 'monthly' : 'approvals');
           }
           st.rows = [];
@@ -261,9 +275,26 @@ function activityPreviewTable(rows) {
           }),
           key === 'owner' ? suggestChip(r) : null)),
         h('td', {}, h('select', {
-          class: 'cell', onChange: (e) => { r.category = e.target.value; },
+          class: 'cell', onChange: (e) => { r.category = e.target.value; r._catTouched = true; },
         }, ...Object.entries(CATEGORY).map(([k, v]) => h('option', { value: k, selected: r.category === k }, v)))),
         h('td', { class: 'raw' }, r._raw || ''))))));
+}
+
+/**
+ * 등록한 줄에서 '활동명 → 담당·계·분류' 를 기억한다.
+ *
+ * 선생님이 미리보기에서 고친 것이 곧 정답이다. 그것을 흘려보내지 않고 쌓아두면
+ * 다음 달에는 같은 활동이 저절로 제자리에 들어간다. 시간표의 [기본 시간표] 와 같은 뜻이다.
+ */
+async function learnFromRows(rows) {
+  const pairs = rows
+    .filter((r) => r.title && (r.owner || r.dept || r.category))
+    .map((r) => ({ title: r.title, owner: r.owner || '', dept: r.dept || '', category: r.category || '' }));
+  if (!pairs.length) return 0;
+  const { rows: merged, added, bumped } = mergeLessons(list('lessons'), pairs, FIXED_SOURCE);
+  if (!added && !bumped) return 0;
+  await putMany('lessons', merged.map((m) => (m.id ? m : newLesson(m))));
+  return added + bumped;
 }
 
 /** 확신이 낮아 자동으로 넣지 않은 추천은 눌러서 넣을 수 있게 칩으로 보여준다. */

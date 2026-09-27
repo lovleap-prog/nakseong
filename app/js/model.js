@@ -140,6 +140,7 @@ export function newLesson(partial = {}) {
   return {
     id: uid('lsn'),
     title: '', owner: '', dept: '',
+    category: '',        // 고쳐서 등록한 분류. 다음에 같은 활동이 오면 이대로 잡는다.
     count: 1,
     source: '',
     ...partial,
