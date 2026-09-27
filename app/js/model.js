@@ -126,6 +126,10 @@ export function newStaff(partial = {}) {
     id: uid('stf'),
     name: '', dept: '', position: '',
     keywords: [],        // 담당 업무 낱말. 이게 매칭의 핵심 근거가 된다.
+    // '콕 집어' 규칙. 켜 두면 낱말이 활동명에 들어 있을 때 저울질 없이 이 사람으로 정한다.
+    // 학교마다 '이건 무조건 누구' 인 일이 있는데(영어원어민 순회 → 영어 담당),
+    // 닮은 정도로 겨루게 두면 엉뚱한 사람이 이기거나 '참고' 로만 남았다.
+    strict: false,
     active: true,
     ...partial,
   };

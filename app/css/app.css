@@ -1422,3 +1422,6 @@ body.widget .widget-body { padding-bottom: 16px; }
 @media (hover: none) {
   .band-del, .mi-del { opacity: .55; }
 }
+
+/* 업무분장표의 '콕' 칸 */
+.tbl td.center, .tbl th.center { text-align: center; width: 44px; }

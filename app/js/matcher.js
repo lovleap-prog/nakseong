@@ -27,6 +27,34 @@ export function similarity(a, b) {
   return (2 * hit) / (A.size + B.size);
 }
 
+/**
+ * '콕 집어' 규칙 — 낱말이 활동명·세부내용에 들어 있으면 그 사람으로 정한다.
+ * 낱말이 긴 규칙을 먼저 본다. '유치원' 과 '작은유치원' 이 함께 있으면 긴 쪽이 맞다.
+ */
+function strictHit(activity, staff) {
+  const text = [activity.title, activity.detail].filter(Boolean).join(' ');
+  if (!text.trim()) return null;
+  const rules = [];
+  for (const s of staff) {
+    if (!s.strict) continue;
+    for (const kw of s.keywords || []) {
+      const k = String(kw).trim();
+      if (k.length >= 2) rules.push({ k, s });
+    }
+  }
+  rules.sort((a, b) => b.k.length - a.k.length);
+  const flat = (t) => String(t).replace(/\s+/g, '');
+  for (const { k, s } of rules) {
+    if (text.includes(k) || flat(text).includes(flat(k))) {
+      return {
+        owner: s.name, dept: s.dept, score: 2,
+        confidence: 'high', reason: `콕 집어 '${k}'`, strict: true,
+      };
+    }
+  }
+  return null;
+}
+
 const RULE_WEIGHT = 1.0;
 const CASE_WEIGHT = 0.8;
 const CASE_FLOOR = 0.45;      // 이만큼은 닮아야 같은 활동으로 친다
@@ -64,6 +92,10 @@ export function matchSources() {
  * @returns {{owner, dept, score, confidence, reason}|null}
  */
 export function suggestOwner(activity, sources = matchSources()) {
+  // (0) '콕 집어' 규칙이 걸리면 여기서 끝낸다. 저울질하지 않는다.
+  const pinned = strictHit(activity, sources.staff);
+  if (pinned) return pinned;
+
   // 활동명·세부내용은 강한 근거, 장소·대상은 약한 근거로 나눈다.
   // 'AI교실' 에서 수업한다고 정보 담당자가 맡는 건 아니기 때문이다.
   const strong = [activity.title, activity.detail].filter(Boolean).join(' ');
@@ -143,13 +175,16 @@ export function fillOwners(rows, { overwrite = false } = {}) {
   let filled = 0;
   let hinted = 0;
   for (const r of rows) {
-    if (!overwrite && (r.owner || r.dept)) continue;
-    const hit = suggestOwner(r, sources);
+    // '콕 집어' 규칙은 이미 채워진 칸도 바로잡는다. 그러라고 콕 집어 둔 것이다.
+    const pre = suggestOwner(r, sources);
+    const strict = pre && pre.strict;
+    if (!overwrite && !strict && (r.owner || r.dept)) continue;
+    const hit = pre;
     if (!hit) continue;
     r._suggested = hit;
     if (hit.score >= AUTO_FILL_FLOOR) {
       if (hit.owner) r.owner = hit.owner;
-      if (hit.dept && !r.dept) r.dept = hit.dept;
+      if (hit.dept && (strict || !r.dept)) r.dept = hit.dept;
       filled++;
     } else {
       hinted++;

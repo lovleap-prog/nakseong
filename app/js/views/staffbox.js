@@ -1,5 +1,5 @@
 // 설정 탭의 '담당자 자동 매칭' 상자 — 업무분장표 + 과거 계획 학습
-import { h, toast, confirmDialog, clear, download } from '../lib/dom.js';
+import { h, toast, confirmDialog, clear, download, openModal } from '../lib/dom.js';
 import { newStaff } from '../model.js';
 import { list, putMany, remove, replaceAllStaff } from '../store.js';
 import { mergeLessons, suggestOwner, matchSources } from '../matcher.js';
@@ -25,15 +25,25 @@ export function staffBox(ctx) {
       '담당 업무 낱말은 쉼표로 여러 개 적으세요. 예) 박지현 / 생활인성부 / ',
       h('code', {}, '안전, 학교폭력, 소방, 생활지도')));
 
+    box.appendChild(h('p', { class: 'muted small' },
+      h('b', {}, '콕'), ' 을 켜면 그 낱말이 활동명에 들어 있을 때 ',
+      h('b', {}, '저울질 없이 그 사람·계로 정합니다.'), ' ',
+      '이미 다른 이름이 채워져 있어도 바로잡습니다. \u2018영어원어민 순회는 무조건 영어 담당\u2019 처럼 ',
+      '학교에서 이미 정해진 것에 쓰세요.'));
+
     box.appendChild(staff.length
       ? h('div', { class: 'table-wrap' },
         h('table', { class: 'tbl' },
-          h('thead', {}, h('tr', {}, ...['이름', '부서/계', '담당 업무 낱말', ''].map((t) => h('th', {}, t)))),
+          h('thead', {}, h('tr', {},
+            ...['이름', '부서/계', '담당 업무 낱말'].map((t) => h('th', {}, t)),
+            h('th', { class: 'center', title: '켜면 저울질 없이 이 사람으로 정합니다' }, '콕'),
+            h('th', {}, ''))),
           h('tbody', {}, ...rows)))
       : h('div', { class: 'empty' }, '등록된 업무분장이 없습니다.'));
 
     box.appendChild(h('div', { class: 'row gap', style: { marginTop: '10px' } },
       h('button', { class: 'btn btn-sm', onClick: () => addOne(redraw) }, '+ 사람 추가'),
+      h('button', { class: 'btn btn-sm', onClick: () => openPaste(redraw) }, '\u{1F4CB} 여러 줄 붙여넣기'),
       uploadButton('업무분장표 올리기', '.hwpx,.xlsx,.csv,.tsv', (file) => importStaff(file, redraw)),
       h('button', { class: 'btn btn-sm', onClick: () => downloadStaff(staff) }, 'CSV 내려받기')));
 
@@ -93,15 +103,17 @@ function staffRow(s, redraw) {
   const name = h('input', { class: 'cell', value: s.name || '' });
   const dept = h('input', { class: 'cell', value: s.dept || '' });
   const kw = h('input', { class: 'cell', value: (s.keywords || []).join(', '), placeholder: '안전, 학교폭력, 소방' });
+  const strict = h('input', { type: 'checkbox', checked: !!s.strict, title: '이 낱말이 활동명에 있으면 무조건 이 사람으로 정합니다' });
   const save = async () => {
     await putMany('staff', [{
       ...s, name: name.value.trim(), dept: dept.value.trim(),
-      keywords: splitKeywords(kw.value),
+      keywords: splitKeywords(kw.value), strict: strict.checked,
     }]);
   };
-  [name, dept, kw].forEach((el) => el.addEventListener('change', save));
+  [name, dept, kw, strict].forEach((el) => el.addEventListener('change', save));
   return h('tr', {},
     h('td', {}, name), h('td', {}, dept), h('td', {}, kw),
+    h('td', { class: 'center' }, strict),
     h('td', { class: 'nowrap' }, h('button', {
       class: 'icon-btn danger', title: '삭제',
       onClick: async () => {
@@ -109,6 +121,53 @@ function staffRow(s, redraw) {
         await remove('staff', s.id); redraw();
       },
     }, '✕')));
+}
+
+/**
+ * 여러 줄 붙여넣기 — '낱말 / 이름 / 계' 한 줄에 하나.
+ * 네댓 줄 넣자고 [+ 사람 추가] 를 네 번 누르고 칸마다 옮겨 다니는 것이 성가시다.
+ */
+function openPaste(redraw) {
+  const ta = h('textarea', {
+    class: 'input', rows: 8,
+    placeholder: ['영어원어민, 정하늘아, 영어',
+      '유치원, 이정아, 유치원',
+      '토요스포츠, 진치훈, 학부모회',
+      '좋은수업, 김용신, 연구'].join('\n'),
+  });
+  const strict = h('input', { type: 'checkbox', checked: true });
+
+  openModal('여러 줄 붙여넣기', h('div', {},
+    h('p', { class: 'note' },
+      '한 줄에 하나씩 ', h('b', {}, '낱말, 이름, 계'), ' 를 쉼표로 적으세요. ',
+      '낱말을 여러 개 주려면 ', h('code', {}, '영어원어민|영어회화, 정하늘아, 영어'),
+      ' 처럼 ', h('code', {}, '|'), ' 로 묶습니다.'),
+    ta,
+    h('label', { class: 'check' }, strict, '\u2018콕\u2019 으로 넣기 (저울질 없이 이 사람으로 정함)')), [
+    { label: '취소', onClick: (c) => c() },
+    {
+      label: '넣기', class: 'btn-primary',
+      onClick: async (c) => {
+        const rows = [];
+        for (const line of ta.value.split(/\r?\n/)) {
+          const t = line.trim();
+          if (!t) continue;
+          const parts = t.split(/[,\t]/).map((x) => x.trim());
+          const [kws, name, dept] = [parts[0] || '', parts[1] || '', parts[2] || ''];
+          if (!kws || !name) continue;
+          rows.push(newStaff({
+            name, dept,
+            keywords: kws.split(/[|·]/).map((x) => x.trim()).filter(Boolean),
+            strict: strict.checked,
+          }));
+        }
+        if (!rows.length) return toast('넣을 줄을 찾지 못했습니다. \u2018낱말, 이름, 계\u2019 차례로 적어주세요.', 'warn');
+        await putMany('staff', rows);
+        toast(`${rows.length}줄을 넣었습니다.`, 'ok');
+        c(); redraw();
+      },
+    },
+  ]);
 }
 
 const splitKeywords = (v) => String(v).split(/[,、·|/]+/).map((x) => x.trim()).filter(Boolean);

@@ -272,7 +272,7 @@ function suggestChip(r) {
   if (!hit || !hit.owner) return null;
   if (r.owner === hit.owner) {
     return h('span', { class: `chip-sug ${confCls(hit.confidence)}`, title: hit.reason },
-      `자동 · ${confLabel(hit.confidence)}`);
+      hit.strict ? '콕 규칙' : `자동 · ${confLabel(hit.confidence)}`);
   }
   if (r.owner) return null;
   return h('button', {
