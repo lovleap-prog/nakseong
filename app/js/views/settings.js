@@ -3,7 +3,7 @@ import { h, toast, confirmDialog, download, clear } from '../lib/dom.js';
 import { loadConfig, saveConfig, resetConfig, APP_VERSION } from '../config.js';
 import {
   currentUser, setUser, exportAll, importAll, backendKind, list, isAdmin, signOut,
-  whereAmI, readErrors,
+  whereAmI, readErrors, remove, audit,
 } from '../store.js';
 import { ROLE } from '../model.js';
 import { insertSample, removeSample, hasSample } from '../sampledata.js';
@@ -232,6 +232,8 @@ export function renderSettings(ctx) {
       h('p', { class: 'muted small' },
         '시간표 칸에 담당 선생님 이름을 적어 두었다면 그쪽이 먼저입니다. 같은 분이 맡은 것은 저절로 한 줄에 섭니다.'))),
 
+    isAdmin() && dupBox(ctx),
+
     full && box('둘러보기용 예시 자료', h('div', {},
       h('p', { class: 'note' },
         '이번 주 일정·반복일정·방과후 강좌 예시를 한 번에 넣어 화면이 어떻게 보이는지 확인할 수 있습니다. ',
@@ -403,6 +405,60 @@ function versionBox() {
       h('button', { class: 'btn', onClick: (e) => check(e.currentTarget) }, '서버 판 확인'),
       h('button', { class: 'btn btn-danger', onClick: (e) => force(e.currentTarget) }, '새 판 받기'))));
 }
+
+/**
+ * 같은 내용이 두 번 들어간 교육활동 치우기.
+ *
+ * 이 컴퓨터에 남아 있던 자료를 공용에도 올리면 같은 일정이 두 벌이 된다.
+ * 하나하나 ✕ 를 누르자면 끝이 없어서, 같은 것끼리 묶어 첫 건만 남기고 치운다.
+ */
+function dupBox(ctx) {
+  const groups = dupGroups();
+  if (!groups.length) return null;
+  const extra = groups.reduce((n, g) => n + g.length - 1, 0);
+
+  return box('\u{1F46F} 겹쳐 들어간 교육활동', h('div', {},
+    h('p', { class: 'note' },
+      '날짜·시간·활동명·대상·장소가 똑같은 일정이 ', h('b', {}, `${groups.length}가지, 모두 ${extra}건`),
+      ' 더 들어가 있습니다. 먼저 들어온 것만 남기고 나머지를 치웁니다.'),
+    h('ul', { class: 'leftover-list' },
+      ...groups.slice(0, 8).map((g) => h('li', {},
+        h('b', {}, g[0].title), ` ${fmtKShort(g[0].date)} · ${g.length}벌`)),
+      groups.length > 8 ? h('li', { class: 'muted' }, `그 밖에 ${groups.length - 8}가지`) : null),
+    h('button', {
+      class: 'btn btn-danger',
+      onClick: async () => {
+        if (!(await confirmDialog(
+          `겹쳐 들어간 ${extra}건을 치웁니다. 같은 내용 가운데 먼저 들어온 것은 그대로 남습니다.`,
+          { danger: true, okText: '치우기' }))) return;
+        let n = 0;
+        for (const g of dupGroups()) {
+          for (const a of g.slice(1)) { await audit('중복삭제', a.id, a, null); await remove('activities', a.id); n += 1; }
+        }
+        toast(`${n}건을 치웠습니다.`, 'ok');
+        ctx.refresh();
+      },
+    }, `겹친 ${extra}건 치우기`)));
+}
+
+/** 내용이 똑같은 것끼리 묶는다. 먼저 들어온 것이 앞에 온다. */
+function dupGroups() {
+  const key = (a) => [a.date, a.endDate || '', a.time || '', String(a.title).trim(),
+    String(a.target || '').trim(), String(a.place || '').trim()].join('|');
+  const by = new Map();
+  for (const a of list('activities')) {
+    if (!a.title) continue;
+    const k = key(a);
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push(a);
+  }
+  return [...by.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => g.slice().sort((x, y) => String(x.createdAt || '').localeCompare(String(y.createdAt || ''))))
+    .sort((x, y) => y.length - x.length);
+}
+
+const fmtKShort = (d) => (d ? `${Number(d.slice(5, 7))}. ${Number(d.slice(8, 10))}.` : '');
 
 /**
  * 자료 진단 — '넣은 것이 안 보인다' 를 혼자 가릴 수 있게 한다.

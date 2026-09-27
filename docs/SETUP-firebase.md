@@ -103,7 +103,12 @@ service cloud.firestore {
         (ok(school)
          && resource.data.status == 'pending'
          && request.resource.data.status == 'pending'
-         && resource.data.createdBy == member(school).name);
+         && resource.data.createdBy == member(school).name) ||
+        // 이미 승인된 제 일정에 '삭제 요청' 만 달거나 거두는 것. 지우는 것은 관리자가 한다.
+        (ok(school)
+         && resource.data.createdBy == member(school).name
+         && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['delReq', 'delReqBy', 'delReqAt', 'delReqReason', 'updatedAt']));
       allow delete: if isAdmin(school) ||
         (ok(school) && resource.data.status == 'pending'
          && resource.data.createdBy == member(school).name);

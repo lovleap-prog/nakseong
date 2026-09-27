@@ -7,6 +7,7 @@ import {
 import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashesOn, timetableOn } from '../select.js';
 import { clashLabel, bellList, defaultBell, bellById, dayBellId, bellFor, describeTime } from '../conflict.js';
 import { openActivityForm } from '../ui/activityForm.js';
+import { canDelete, deleteOrRequest, delTitle } from '../del.js';
 import { openDayExport, openPeriodExport } from '../ui/exporter.js';
 import { loadConfig } from '../config.js';
 import { holidayOn } from '../lib/holidays.js';
@@ -60,6 +61,7 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
       h('div', { class: 'card-title-row' },
         h('span', { class: 'card-title' }, a.title),
         a.isRecurring ? h('span', { class: 'badge st-rec' }, '상시') : statusBadge(a, { showAll: showStatus }),
+        a.delReq ? h('span', { class: 'badge st-del', title: a.delReqReason || '' }, '삭제 요청') : null,
         a.needsBus ? h('span', { class: 'badge st-bus', title: a.busNote || '배차 필요' }, '\u{1F68C} 배차') : null,
         a.endDate ? h('span', { class: 'badge st-span' }, `~ ${fmtK(a.endDate, { year: false })}`) : null),
       labeledChips(chips),
@@ -73,14 +75,8 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
       ? h('div', { class: 'card-actions' },
         h('button', { class: 'icon-btn', title: '수정', onClick: () => openActivityForm(a, { onSaved: onChange }) }, '✎'),
         h('button', {
-          class: 'icon-btn danger', title: '삭제',
-          onClick: async () => {
-            if (!(await confirmDialog(`"${a.title}" 일정을 삭제할까요?`, { danger: true, okText: '삭제' }))) return;
-            await audit('삭제', a.id, a, null);
-            await remove('activities', a.id);
-            toast('삭제했습니다.', 'ok');
-            if (onChange) onChange();
-          },
+          class: `icon-btn danger${a.delReq ? ' on' : ''}`, title: delTitle(a),
+          onClick: () => deleteOrRequest(a, onChange),
         }, '✕'))
       : null);
 
@@ -127,18 +123,31 @@ export function layoutBands(spans, from, to) {
 }
 
 /** 띠 하나 */
-function bandNode(b, { compact = false, onClick } = {}) {
+function bandNode(b, opt0 = {}) {
+  const { compact = false, onClick } = opt0;
   const { a } = b;
   const node = h(onClick ? 'button' : 'div', {
     class: `band cat-${a.category}${b.cutLeft ? ' cut-l' : ''}${b.cutRight ? ' cut-r' : ''}`,
-    style: { gridColumn: `${b.start + 1} / span ${b.span}`, gridRow: String(b.lane + 1) },
     title: `${a.title} (${fmtK(a.date, { year: false })} ~ ${fmtK(a.endDate, { year: false })})`,
     onClick: onClick ? () => onClick(a) : undefined,
   },
     b.cutLeft ? h('span', { class: 'band-arrow' }, '\u25C0') : null,
     h('span', { class: 'band-text' }, compact ? a.title : `${a.title}${a.target ? ` · ${a.target}` : ''}`),
+    a.delReq ? h('span', { class: 'band-delmark', title: '삭제 요청' }, '\u2715') : null,
     b.cutRight ? h('span', { class: 'band-arrow' }, '\u25B6') : null);
-  return makeDraggable(node, a);
+  makeDraggable(node, a);
+  // 띠에도 지우는 자리를 둔다. 단추 안에 단추를 넣을 수 없어 겉을 한 번 감싼다.
+  return h('div', {
+    class: 'band-wrap',
+    style: { gridColumn: `${b.start + 1} / span ${b.span}`, gridRow: String(b.lane + 1) },
+  },
+    node,
+    canDelete(a)
+      ? h('button', {
+        class: 'band-del', title: delTitle(a),
+        onClick: (e) => { e.stopPropagation(); deleteOrRequest(a, opt0.onChange); },
+      }, '\u2715')
+      : null);
 }
 
 /**
@@ -306,11 +315,18 @@ function spanCard(a, day, onChange) {
       `${fmtK(a.date, { year: false })} ~ ${fmtK(a.endDate, { year: false })}`,
       nth > 0 ? ` · ${nth}일째/${days.length}일` : ''),
     labeledChips([['대상', a.target], ['장소', a.place], ['담당', a.owner]]),
-    (isAdmin() || a.createdBy === currentUser().name)
-      ? h('button', {
-        class: 'icon-btn', title: '수정',
-        onClick: () => openActivityForm(a, { onSaved: onChange }),
-      }, '\u270E')
+    a.delReq ? h('span', { class: 'badge st-del', title: a.delReqReason || '' }, '삭제 요청') : null,
+    // 기간 일정에는 지우는 자리가 아예 없었다. 잘못 올리면 손댈 방법이 없었다.
+    canDelete(a)
+      ? h('span', { class: 'band-tools' },
+        h('button', {
+          class: 'icon-btn', title: '수정',
+          onClick: () => openActivityForm(a, { onSaved: onChange }),
+        }, '\u270E'),
+        h('button', {
+          class: `icon-btn danger${a.delReq ? ' on' : ''}`, title: delTitle(a),
+          onClick: () => deleteOrRequest(a, onChange),
+        }, '\u2715'))
       : null);
 }
 
@@ -625,7 +641,7 @@ function weekBands(from, to, ctx) {
   const bands = layoutBands(spans, from, to);
   return h('div', { class: 'week-bandwrap' },
     h('div', { class: 'band-label' }, '기간 운영'),
-    bandGrid(bands, { onClick: (a) => { ctx.setDate(a.date); ctx.go('daily'); } }));
+    bandGrid(bands, { onClick: (a) => { ctx.setDate(a.date); ctx.go('daily'); }, onChange: () => ctx.refresh() }));
 }
 
 /**
@@ -690,11 +706,21 @@ export function renderMonthly(ctx) {
             lanes ? h('span', { class: 'month-bandspace' }) : null,
             ...acts.slice(0, 3).map((a) => makeDraggable(h('span', {
               class: `month-item cat-${a.category}${a.status === 'pending' ? ' is-pending' : ''}`
-                + `${a.needsBus ? ' needs-bus' : ''}`,
+                + `${a.needsBus ? ' needs-bus' : ''}${a.delReq ? ' is-delreq' : ''}`,
               title: a.needsBus
                 ? `${a.title} — 배차 필요: ${a.busNote || '(내용 없음)'}`
                 : (canMove(a) ? `${a.title} — 끌어서 옮기기` : a.title),
-            }, a.needsBus ? h('span', { class: 'bus-dot' }, '\u{1F68C}') : null, a.title), a)),
+            },
+              a.needsBus ? h('span', { class: 'bus-dot' }, '\u{1F68C}') : null,
+              h('span', { class: 'mi-text' }, a.title),
+              // 칸 전체가 단추라 그 안에 단추를 또 넣을 수 없다. 눌리는 span 으로 둔다.
+              canDelete(a)
+                ? h('span', {
+                  class: 'mi-del', role: 'button', tabindex: '0', title: delTitle(a),
+                  onClick: (e) => { e.stopPropagation(); e.preventDefault(); deleteOrRequest(a, () => ctx.refresh()); },
+                  onKeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); deleteOrRequest(a, () => ctx.refresh()); } },
+                }, '\u2715')
+                : null), a)),
             // 가려진 것은 마우스를 올리면 작은 목록으로 펼친다.
             // title 풍선은 늦게 뜨고 한 줄로 뭉개져서, 올려도 안 보인다는 말을 들었다.
             acts.length > 3
@@ -705,7 +731,7 @@ export function renderMonthly(ctx) {
               : null);
           return makeDropTarget(cell, day);
         })),
-        bandGrid(bands, { compact: true, onClick: (a) => goDay(a.date) }));
+        bandGrid(bands, { compact: true, onClick: (a) => goDay(a.date), onChange: () => ctx.refresh() }));
     }),
 
     // 배차가 필요한 활동만 따로 모은다.

@@ -5,11 +5,14 @@ import { pendingList } from '../select.js';
 import { put, audit, list, isAdmin, currentUser, remove } from '../store.js';
 import { openActivityForm } from '../ui/activityForm.js';
 import { activityCard } from './schedule.js';
+import { deleteRequests, approveDelete, rejectDelete } from '../del.js';
 import { revertDateChange } from '../dragmove.js';
 
 export function renderApprovals(ctx) {
   const pending = pendingList();
   const me = currentUser();
+  // 선생님이 승인된 제 일정을 지워 달라고 올린 것. 지우는 것은 관리자가 한다.
+  const delReqs = deleteRequests(list('activities'));
   const mine = list('activities')
     .filter((a) => a.createdBy === me.name && a.status !== 'pending')
     .sort((x, y) => String(y.updatedAt || '').localeCompare(String(x.updatedAt || '')))
@@ -34,6 +37,13 @@ export function renderApprovals(ctx) {
           ? h('button', { class: 'btn btn-primary', onClick: approveAll }, '전체 승인')
           : null)),
 
+    isAdmin() && delReqs.length
+      ? h('section', { class: 'sec' },
+        h('div', { class: 'sec-head' }, h('h3', {}, `\u{1F5D1} 삭제 요청 ${delReqs.length}건`),
+          h('span', { class: 'muted small' }, '지우면 되돌릴 수 없습니다.')),
+        ...delReqs.map((a) => delRow(a, refresh)))
+      : null,
+
     isAdmin()
       ? h('section', { class: 'sec' },
         h('div', { class: 'sec-head' }, h('h3', {}, '확인 대기'),
@@ -50,6 +60,38 @@ export function renderApprovals(ctx) {
       isAdmin() ? auditTable() : (mine.length
         ? h('div', {}, ...mine.map((a) => activityCard(a, { compact: true, onChange: refresh, showStatus: true, showDate: true })))
         : h('div', { class: 'empty' }, '처리된 내역이 없습니다.'))));
+}
+
+/** 삭제 요청 한 줄 — 누가 왜 지워 달라고 했는지 보이고, 지우거나 물린다. */
+function delRow(a, refresh) {
+  return h('div', { class: 'pending-row' },
+    h('div', { class: 'pending-date' }, fmtK(a.date, { year: false })),
+    h('div', { class: 'pending-main' },
+      h('div', { class: 'card-title-row' },
+        h('span', { class: 'card-title' }, a.title),
+        a.time ? h('span', { class: 'chip' }, a.time) : null,
+        a.endDate ? h('span', { class: 'badge st-span' }, `~ ${fmtK(a.endDate, { year: false })}`) : null),
+      labeledChips([['대상', a.target], ['장소', a.place], ['담당', a.owner], ['요청', a.delReqBy || '-']]),
+      a.delReqReason ? h('p', { class: 'card-detail' }, `까닭: ${a.delReqReason}`) : null),
+    h('div', { class: 'pending-actions' },
+      h('button', {
+        class: 'btn btn-sm', onClick: async () => {
+          const why = await promptDialog('삭제 요청을 물립니다. 까닭을 적어주세요. (요청한 분에게 보입니다)',
+            { placeholder: '예) 계획에 이미 실려 있어 그대로 둡니다.' });
+          if (why === null) return;
+          await rejectDelete(a, why);
+          toast('삭제 요청을 물렸습니다.', 'ok');
+          refresh();
+        },
+      }, '요청 물리기'),
+      h('button', {
+        class: 'btn btn-sm btn-danger', onClick: async () => {
+          if (!(await confirmDialog(`"${a.title}" 을 지웁니다. 되돌릴 수 없습니다.`, { danger: true, okText: '지우기' }))) return;
+          await approveDelete(a);
+          toast('지웠습니다.', 'ok');
+          refresh();
+        },
+      }, '지우기')));
 }
 
 function pendingRow(a, me, refresh) {
