@@ -1458,3 +1458,41 @@ body.widget .widget-body { padding-bottom: 16px; }
 @media (hover: none) { .cell-add { opacity: .5; } }
 /* 일일의 [일정 추가] 는 가장 큰 일이라 눈에 띄게 */
 .btn-add { font-size: 14.5px; font-weight: 700; padding: 9px 16px; box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 28%, transparent); }
+
+/* ── 시간표 조각 모음 ───────────────────────── */
+.tt-work { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 12px; align-items: start; }
+.tt-work > * { min-width: 0; }
+.tt-palette {
+  position: sticky; top: 8px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px; display: flex; flex-direction: column; gap: 8px;
+}
+.pal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.pal-list { display: flex; flex-direction: column; gap: 5px; max-height: 58vh; overflow: auto; }
+.pal-chip {
+  position: relative; display: flex; align-items: center; gap: 5px; width: 100%;
+  text-align: left; font-size: 12.5px; font-weight: 600; line-height: 1.3;
+  padding: 5px 20px 5px 8px; border-radius: 6px; cursor: grab;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+}
+.pal-chip.kind-subject { border-left: 3px solid var(--brand); }
+.pal-chip.kind-special { border-left: 3px solid var(--ok); }
+.pal-chip:hover { border-color: var(--brand); }
+.pal-chip.is-armed { outline: 2px solid var(--brand); background: color-mix(in srgb, var(--brand) 12%, var(--panel)); }
+.pal-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-sub { font-weight: 400; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.pal-del { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); color: var(--danger); opacity: 0; font-size: 11px; cursor: pointer; }
+.pal-chip:hover .pal-del, .pal-del:focus { opacity: 1; }
+.pal-foot { display: flex; flex-direction: column; gap: 5px; }
+.pal-foot .btn { width: 100%; }
+
+/* 좁은 화면에서는 시간표 위에 가로로 늘어놓는다 */
+@media (max-width: 900px) {
+  /* minmax(0,…) 이라야 안의 넓은 표가 칸을 밀어내지 않고 제 안에서 옆으로 스크롤된다 */
+  .tt-work { grid-template-columns: minmax(0, 1fr); }
+  .tt-palette { position: static; order: -1; }
+  .pal-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; max-height: none; padding-bottom: 4px; }
+  .pal-chip { width: auto; flex: 0 0 auto; }
+  .pal-del { opacity: .55; }
+  .pal-foot { flex-direction: row; }
+}

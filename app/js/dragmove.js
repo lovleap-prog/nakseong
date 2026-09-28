@@ -53,7 +53,10 @@ const TARGET_SEL = '[data-day],[data-tt-dow],[data-drop-trash]';
 
 function onDown(e, el, a) {
   if (e.button > 0) return;           // 오른쪽·가운데 버튼은 무시
-  if (e.target.closest('button, input, select, a, textarea') && e.target !== el) return;
+  // 안에 든 단추·입력칸을 눌렀으면 끌기가 아니다. 다만 끌 것 자체가 단추인 경우가 있어
+  // (시간표 칸·조각), 그 안의 글자를 눌렀다고 끌기를 접으면 안 된다.
+  const hit = e.target.closest('button, input, select, a, textarea');
+  if (hit && hit !== el && el.contains(hit)) return;
   cleanup();
 
   st = {

@@ -20,6 +20,12 @@ const DOWS = [1, 2, 3, 4, 5];
 // 이 표를 넣어 같은 칸에 함께 둔다. 다른 곳은 모두 week 가 'YYYY-MM-DD' 인지로
 // 걸러 보기 때문에, 이 한 벌은 주간 화면·계획 문서 어디에도 새어 나가지 않는다.
 export const BASE_WEEK = 'base';
+// 조각 모음. 주마다 과목이 갈아 끼워지는 학교가 많아, 쓰던 과목을 옆에 늘어놓고
+// 끌어다 넣게 한다. 같은 timetable 컬렉션에 두어 서버 규칙을 더 손대지 않는다.
+export const PIECE_WEEK = 'pieces';
+const pieceList = () => list('timetable').filter((s) => s.week === PIECE_WEEK && s.title)
+  .sort((a, b) => Number(a.period || 0) - Number(b.period || 0)
+    || String(a.title).localeCompare(String(b.title), 'ko'));
 const baseSlots = () => list('timetable').filter((s) => s.week === BASE_WEEK && s.title)
   .sort((a, b) => a.dow - b.dow || a.period - b.period);
 
@@ -183,7 +189,7 @@ export function renderTimetable(ctx) {
         ? '칸을 눌러 과목·특별실을 넣으세요. 넣은 칸은 끌어서 다른 요일·교시로 옮길 수 있습니다. 교육활동·반복일정과 시간이 겹치면 빨갛게 표시됩니다.'
         : '시간표는 관리자만 고칠 수 있습니다. 겹치는 칸이 보이면 관리자에게 알려주세요.'),
 
-    grid,
+    admin ? h('div', { class: 'tt-work' }, grid, palette(wk, refresh)) : grid,
 
     // 휴지통 — 칸을 끌어다 놓으면 지운다. 골라 둔 것이 있으면 한꺼번에.
     admin && slots.length
@@ -325,6 +331,118 @@ function copyDay(wk, dow, slots, refresh) {
   clip = { type: 'day', label: `${WEEKDAY[dow]}요일 ${items.length}개`, items: items.map(stripId) };
   toast('복사했습니다. 붙여넣을 요일 이름을 누르세요.', 'ok');
   refresh();
+}
+
+/**
+ * 조각 모음 — 과목 하나를 칸에 끌어다 넣는다.
+ *
+ * 주마다 교담이 갈아 끼워지는 학교에서는 지우고 다시 넣는 일이 잦은데, 넣을 때마다
+ * 창을 열어 과목명을 치거나 다른 칸을 복사해 붙여야 했다. 쓰는 과목은 뻔하니
+ * 옆에 늘어놓고 끌어다 놓게 한다. 손가락으로 쓸 때는 조각을 누르고 칸을 누르면 된다.
+ */
+function palette(wk, refresh) {
+  const pieces = pieceList();
+
+  const chip = (s) => {
+    const node = h('button', {
+      class: `pal-chip kind-${s.kind}${clip && clip.piece === s.id ? ' is-armed' : ''}`,
+      title: [s.title, s.place, s.owner, s.note].filter(Boolean).join(' · ') + ' — 끌어다 놓거나, 눌러서 칸을 고르세요',
+      onClick: () => {
+        // 누르면 손에 쥔다. 그다음 칸을 누르면 들어간다(휴대전화에서 끌기 대신).
+        if (clip && clip.piece === s.id) { clip = null; return refresh(); }
+        clip = { type: 'cell', label: s.title, piece: s.id, items: [stripId(s)] };
+        toast(`'${s.title}' 을 쥐었습니다. 넣을 칸을 누르세요.`, 'ok');
+        refresh();
+      },
+    },
+      h('span', { class: 'pal-title' }, s.title),
+      s.place ? h('span', { class: 'pal-sub' }, s.place) : null,
+      h('span', {
+        class: 'pal-del', role: 'button', tabindex: '0', title: '조각 지우기',
+        onClick: async (e) => {
+          e.stopPropagation();
+          await remove('timetable', s.id);
+          if (clip && clip.piece === s.id) clip = null;
+          refresh();
+        },
+      }, '\u2715'));
+    makeDraggable(node, {
+      id: `pal_${s.id}`, canDrag: true,
+      onDrop: async (cell) => {
+        if (!cell.dataset.ttDow) return;
+        const dw = Number(cell.dataset.ttDow);
+        const pd = Number(cell.dataset.ttPeriod);
+        await put('timetable', newSlot({ ...stripId(s), week: wk, dow: dw, period: pd }));
+        toast(`${WEEKDAY[dw]} ${pd}교시에 '${s.title}' 을 넣었습니다.`, 'ok');
+        refresh();
+      },
+    });
+    return node;
+  };
+
+  return h('aside', { class: 'tt-palette' },
+    h('div', { class: 'pal-head' },
+      h('b', {}, '\u{1F9E9} 조각'),
+      h('span', { class: 'muted small' }, '끌어다 놓기')),
+    pieces.length
+      ? h('div', { class: 'pal-list' }, ...pieces.map(chip))
+      : h('p', { class: 'muted small' }, '아래 [쓰던 과목 모으기] 를 누르면 기본 시간표와 요즘 쓴 과목이 조각으로 들어옵니다.'),
+    h('div', { class: 'pal-foot' },
+      h('button', { class: 'btn btn-sm', onClick: () => collectPieces(refresh) }, '\u{1F504} 쓰던 과목 모으기'),
+      h('button', { class: 'btn btn-sm', onClick: () => openPieceForm(refresh) }, '+ 조각 추가')));
+}
+
+/** 기본 시간표와 요즘 쓴 칸에서 과목을 그러모은다. 이미 있는 것은 건너뛴다. */
+async function collectPieces(refresh) {
+  const have = new Set(pieceList().map((s) => key(s)));
+  const recent = list('timetable')
+    .filter((s) => s.title && s.week !== PIECE_WEEK)
+    .sort((a, b) => String(b.week).localeCompare(String(a.week)))
+    .slice(0, 400);
+  const add = [];
+  for (const s of recent) {
+    const k = key(s);
+    if (have.has(k)) continue;
+    have.add(k);
+    add.push(newSlot({ ...stripId(s), week: PIECE_WEEK, dow: 0, period: 0 }));
+  }
+  if (!add.length) return toast('새로 모을 과목이 없습니다.', 'warn');
+  await putMany('timetable', add);
+  toast(`${add.length}개를 조각으로 모았습니다.`, 'ok');
+  refresh();
+}
+
+/** 같은 과목인가 — 이름·장소·담당이 같으면 한 조각으로 본다. */
+const key = (s) => [s.title, s.place || '', s.owner || '', s.kind || ''].join('|').replace(/\s+/g, '');
+
+function openPieceForm(refresh) {
+  const inp = {};
+  const mk = (k, attrs = {}) => (inp[k] = h('input', { class: 'input', ...attrs }));
+  const kindSel = h('select', { class: 'input' },
+    h('option', { value: 'subject' }, '교과·교담'),
+    h('option', { value: 'special' }, '특별실·기타'));
+  const body = h('div', { class: 'form-grid' },
+    h('div', { class: 'span2' }, field('과목명 *', mk('title', { placeholder: '예) 과학3' }))),
+    field('장소', mk('place', { placeholder: '예) 과학실' })),
+    field('담당', mk('owner', { placeholder: '예) 김용신' })),
+    h('div', { class: 'span2' }, field('갈래', kindSel)));
+
+  openModal('조각 추가', body, [
+    { label: '취소', onClick: (c) => c() },
+    {
+      label: '넣기', class: 'btn-primary',
+      onClick: async (c) => {
+        const t = inp.title.value.trim();
+        if (!t) return toast('과목명을 적어주세요.', 'warn');
+        await put('timetable', newSlot({
+          week: PIECE_WEEK, dow: 0, period: 0, title: t,
+          place: inp.place.value.trim(), owner: inp.owner.value.trim(), kind: kindSel.value,
+        }));
+        toast('조각을 넣었습니다.', 'ok');
+        c(); refresh();
+      },
+    },
+  ]);
 }
 
 async function pasteCell(wk, dow, period, refresh) {
