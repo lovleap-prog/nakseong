@@ -10,7 +10,8 @@ import { insertSample, removeSample, hasSample } from '../sampledata.js';
 import { staffBox } from './staffbox.js';
 import { bellsBox } from './bellsbox.js';
 import { membersBox } from './membersbox.js';
-import { sharedLinksMeta, saveSharedLinks, hasSharedLinks, editableLinks, localLinks } from '../links.js';
+import { sharedLinksMeta, saveSharedLinks, hasSharedLinks, editableLinks, localLinks, dailyTail, dailyTailMeta, saveDailyTail } from '../links.js';
+import { DEFAULT_DAILY_TAIL } from '../lib/neis.js';
 import { localLeftovers, uploadLeftovers } from '../store.js';
 
 const field = (label, input, hint) =>
@@ -218,6 +219,8 @@ export function renderSettings(ctx) {
           h('code', {}, 'app/js/config.js'), ' 의 ', h('code', {}, 'links'), ' 를 고쳐 배포하세요.'))),
 
     full && box('시정표 (기본 · 단축 · 수업공개)', bellsBox(ctx)),
+
+    full && tailBox(ctx),
 
     full && box('결재용 한글 문서', h('div', { class: 'form-grid' },
       field('글꼴', fontIn),
@@ -459,6 +462,39 @@ function dupGroups() {
 }
 
 const fmtKShort = (d) => (d ? `${Number(d.slice(5, 7))}. ${Number(d.slice(8, 10))}.` : '');
+
+/**
+ * 일일 안내문 아래에 날마다 똑같이 붙는 문단.
+ *
+ * 생활안전지도·돌봄·급식 시간처럼 학교가 정해 둔 말이라 앱이 지어낼 수 없다.
+ * 한 번 적어 두면 [일일] → [안내문] 을 누를 때마다 그대로 붙는다.
+ */
+function tailBox(ctx) {
+  const saved = dailyTail();
+  const ta = h('textarea', { class: 'input mono', rows: 14, spellcheck: 'false' });
+  ta.value = saved == null ? DEFAULT_DAILY_TAIL : saved;
+  const meta = dailyTailMeta();
+
+  return box('\u{1F4C4} 일일 안내문 고정 문구', h('div', {},
+    h('p', { class: 'note' },
+      '안내문 번호 목록 아래에 그대로 붙는 문단입니다. ',
+      h('code', {}, '{{기간}}'), ' 를 적어 두면 그 자리에 ',
+      h('b', {}, '여러 날 이어지는 일정'), ' 이 ', h('code', {}, '- 학부모상담주간(~11)'),
+      ' 처럼 들어갑니다. 적지 않으면 위 번호 목록에 들어갑니다.'),
+    ta,
+    h('div', { class: 'row gap', style: { marginTop: '8px' } },
+      h('button', {
+        class: 'btn btn-primary',
+        onClick: async () => { await saveDailyTail(ta.value); toast('고정 문구를 저장했습니다.', 'ok'); ctx.refresh(); },
+      }, '저장'),
+      h('button', {
+        class: 'btn btn-sm',
+        onClick: () => { ta.value = DEFAULT_DAILY_TAIL; toast('기본 문구를 불러왔습니다. [저장] 을 눌러야 적용됩니다.', 'ok'); },
+      }, '기본 문구 불러오기'),
+      meta && meta.at
+        ? h('span', { class: 'muted small' }, `${meta.by || '누군가'} · ${new Date(meta.at).toLocaleDateString('ko-KR')} 고침`)
+        : null)));
+}
 
 /**
  * 자료 진단 — '넣은 것이 안 보인다' 를 혼자 가릴 수 있게 한다.

@@ -1,6 +1,8 @@
 // 결재 문구 / 메신저 안내 / 한글 파일 내보내기 모달
 import { h, openModal, toast, copyText, download } from '../lib/dom.js';
-import { neisApprovalText, messengerText, periodText } from '../lib/neis.js';
+import { dailyPlanText, periodText } from '../lib/neis.js';
+import { tripsOn } from '../views/trips.js';
+import { dailyTail } from '../links.js';
 import { buildHwpx, buildHwpxDoc, buildHtmlForHwp, renderBlocksHtml } from '../lib/hwpx-write.js';
 import { weeklyForm, monthlyForm } from '../lib/formdoc.js';
 import { dayBundle, periodBundle, afterSchoolFor } from '../select.js';
@@ -14,47 +16,26 @@ export function openDayExport(date) {
   const bundle = dayBundle(date);
   const school = { ...cfg.school };
 
-  const opts = { includeRecurring: true, includeAfterSchool: true };
-  const cbRec = h('input', { type: 'checkbox', checked: true });
-  const cbAs  = h('input', { type: 'checkbox', checked: true });
+  const out = h('textarea', { class: 'input mono', rows: 22, spellcheck: 'false' });
 
-  const out = h('textarea', { class: 'input mono', rows: 18, spellcheck: 'false' });
-  const tabs = ['나이스 결재용', '메신저 안내용'];
-  let mode = 0;
-
+  // 결재용과 메신저용이 사실상 같은 글이라 한 칸으로 합쳤다. 학교가 쓰던 안내문 모양
+  // 그대로 내고, 되풀이되는 * · - 문단은 [설정] 의 고정 문구에서 가져온다.
   const render = () => {
-    opts.includeRecurring = cbRec.checked;
-    opts.includeAfterSchool = cbAs.checked;
-    const p = { ...bundle, school, options: opts };
-    out.value = mode === 0 ? neisApprovalText(p) : messengerText(p);
+    out.value = dailyPlanText({
+      date, activities: bundle.activities, trips: tripsOn(date),
+      tail: dailyTail(), school,
+    });
   };
 
-  const tabBar = h('div', { class: 'seg' },
-    ...tabs.map((t, i) => h('button', {
-      class: `seg-btn${i === 0 ? ' on' : ''}`,
-      onClick: (e) => {
-        mode = i;
-        for (const b of e.currentTarget.parentNode.children) b.classList.remove('on');
-        e.currentTarget.classList.add('on');
-        render();
-      },
-    }, t)));
-
-  cbRec.addEventListener('change', render);
-  cbAs.addEventListener('change', render);
-
   const body = h('div', {},
-    tabBar,
-    h('div', { class: 'row gap' },
-      h('label', { class: 'check' }, cbRec, '반복(상시) 일정 포함'),
-      h('label', { class: 'check' }, cbAs, '방과후학교 포함')),
     out,
     h('p', { class: 'muted small' },
-      '문구는 바로 고칠 수 있습니다. 고친 내용 그대로 복사·내려받기 됩니다.'));
+      '문구는 바로 고칠 수 있습니다. 고친 내용 그대로 복사·내려받기 됩니다. ',
+      '날마다 되풀이되는 아래 문단은 [설정] → 일일 안내문 고정 문구 에서 고칩니다.'));
 
   render();
 
-  openModal(`${fmtK(date)} 내보내기`, body, [
+  openModal(`${fmtK(date)} 일일교육활동 안내문`, body, [
     { label: '닫기', onClick: (c) => c() },
     {
       label: '복사',

@@ -441,7 +441,7 @@ export function renderDaily(ctx) {
           title: '이 날짜에 교육활동을 올립니다. 관리자 확인 뒤 모두에게 보입니다.',
           onClick: () => openActivityForm(null, { defaultDate: d, onSaved: rerender }),
         }, '\u2795 일정 추가'),
-        h('button', { class: 'btn', onClick: () => openDayExport(d) }, '결재문구·한글파일'),
+        h('button', { class: 'btn', onClick: () => openDayExport(d) }, '일일 안내문'),
       ],
     }),
 

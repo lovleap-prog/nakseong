@@ -3,7 +3,7 @@
 //
 // VERSION 은 고칠 때마다 올린다. 올리면 옛 캐시를 통째로 버리고 새로 받는다.
 // 안 올리면 학교 컴퓨터에 낡은 파일이 남아 '내 화면만 다르다' 는 일이 생긴다.
-const VERSION = 'v41';
+const VERSION = 'v42';
 const CACHE = `sam-${VERSION}`;
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',

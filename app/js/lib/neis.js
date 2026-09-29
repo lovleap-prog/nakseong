@@ -68,6 +68,102 @@ export function neisApprovalText(p) {
   return L.join('\n');
 }
 
+/** 낙성초 일일교육활동 안내문의 고정 문구 기본값. 설정에서 학교에 맞게 고친다. */
+export const DEFAULT_DAILY_TAIL = [
+  '* 아침책다방(08:00-08:50, 사제동행 독서, 연중)',
+  '* 교육활동 내실화',
+  '{{기간}}',
+  '- 따뜻하고 행복한 학교문화 만들기: 공수인사',
+  '* 일일 생활안전지도',
+  '- 쉬는 시간 및 복도 통행 안전, 우유급식',
+  '- 화장실 및 정수기 사용 위생안전',
+  '- 식중독 예방 철저(급식실), 식사전 반드시 손씻기',
+  '- 화재예방, 교통안전, 생활안전, 놀이시설 안전(꿀벌놀이터 등)',
+  '* 1, 2학년 돌봄교실 운영',
+  '- 피아노(화, 목) / 주산,음악줄넘기(수) / 뮤지컬(목) / 외발자전거(금)',
+  '* 방과후학교 운영(7,8교시)',
+  '* 저녁돌봄 운영(~19시, 유치원)',
+  '* 급식 시간: 유 12:20~ / 1-3년 12:30~ / 4-6년 12:40~',
+  '* 감염병 관련 예방수칙 준수 철저 안내 (학생, 학부모)',
+  '- 의심 증상 시 마스크 착용 및 손 씻기 교육 강화',
+  '- 증상 시 즉시 진료, 타인 접촉 최소화',
+  '- 학생, 학부모, 교직원 소통 채널 확보 및 소통강화(비상연락망 구비)',
+  '* 교직원 안전(급식실 안전 등)',
+].join('\n');
+
+/** '제목(대상, 시간, 장소)' — 학교 안내문이 쓰는 차례 그대로. */
+function itemText(a, date) {
+  const bits = [];
+  if (a.target) bits.push(a.target);
+  // 여러 날 이어지는 것은 '~30' 처럼 끝나는 날만 적는다(문서가 그렇게 쓰여 있다).
+  if (a.endDate && a.endDate > a.date) {
+    const e = parseYmd(a.endDate);
+    const s = parseYmd(a.date);
+    bits.push(e.getMonth() === s.getMonth() ? `~${e.getDate()}` : `~${e.getMonth() + 1}.${e.getDate()}`);
+  }
+  const t = describeTime(a) || a.time;
+  if (t) bits.push(t);
+  if (a.place) bits.push(a.place);
+  const head = bits.length ? `${a.title}(${bits.join(', ')})` : a.title;
+  // 세부 내용은 다음 줄에 그대로 붙인다. 구글시트 주소 같은 것이 여기 들어간다.
+  const detail = String(a.detail || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  return [head, ...detail];
+}
+
+/**
+ * 일일교육활동 안내문.
+ *
+ * 학교마다 쓰던 모양이 있다. 낙성초는 '9월 9일 수요일' 아래 번호 목록을 적고,
+ * 그 아래 해마다 똑같은 * · - 문단이 붙는다. 그 고정 문단은 설정에 적어 두고
+ * 여기서는 날마다 달라지는 것만 만들어 얹는다.
+ *
+ * 고정 문단에 {{기간}} 을 적어 두면 그 자리에 기간 일정이 '- 이름(~11)' 로 들어간다.
+ * 적어 두지 않으면 기간 일정도 위 번호 목록에 들어간다.
+ */
+export function dailyPlanText(p) {
+  const { date, activities = [], trips = [] } = p;
+  const tail = String(p.tail == null ? DEFAULT_DAILY_TAIL : p.tail);
+  const d = parseYmd(date);
+  const L = [];
+
+  L.push(`${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEKDAY[d.getDay()]}요일`);
+
+  const isSpan = (a) => a.endDate && a.endDate > a.date;
+  const hasSlot = tail.includes('{{기간}}');
+  const spans = activities.filter(isSpan);
+  const main = activities.filter((a) => !hasSlot || !isSpan(a)).slice().sort(byTime);
+
+  let n = 0;
+  for (const a of main) {
+    const [head, ...rest] = itemText(a, date);
+    L.push(`${++n}. ${head}`);
+    for (const line of rest) L.push(line);
+  }
+
+  // 보결이 필요한 출장은 안내문에 꼭 들어간다. 그 날 수업을 누가 들어가는지가 걸려서다.
+  for (const t of trips.filter((x) => x.needsSub)) {
+    L.push(`${++n}. ${t.subTitle || `${t.applicant || ''} 보결`}`.replace(/\s+/g, ' ').trim());
+    if (t.subNote) L.push(t.subNote);
+  }
+
+  const dayBell = bellById(dayBellId(date));
+  if (dayBell && dayBell.id !== defaultBell().id) L.push(`※ ${dayBell.name} 운영`);
+  if (isNoMeal(date)) L.push('※ 비급식일 (급식 없음)');
+
+  L.push('');
+  const spanLines = spans.map((a) => {
+    const e = parseYmd(a.endDate);
+    const s = parseYmd(a.date);
+    const to = e.getMonth() === s.getMonth() ? `~${e.getDate()}` : `~${e.getMonth() + 1}.${e.getDate()}`;
+    return `- ${a.title}(${to})`;
+  });
+  L.push(hasSlot
+    ? tail.split('\n').flatMap((line) => (line.trim() === '{{기간}}' ? spanLines : [line])).join('\n')
+    : tail);
+
+  return L.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+}
+
 /** 교직원 메신저용 안내문 (결재 문구 대체 가능) */
 export function messengerText(p) {
   const { date, activities = [], recurring = [], afterSchool = [] } = p;

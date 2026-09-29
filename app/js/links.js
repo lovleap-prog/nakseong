@@ -62,3 +62,30 @@ export function editableLinks() {
   // 공용 목록이 아직 없으면 이 컴퓨터 값을 채워 둔다. 한 번 눌러 올리면 된다.
   return hasSharedLinks() ? sharedLinks() : localLinks();
 }
+
+// ── 일일 안내문 고정 문구 ────────────────────────────────
+//
+// 학교마다 안내문 아래에 해마다 똑같이 붙는 문단이 있다(생활안전지도·급식 시간 …).
+// 앱이 만들어 낼 수 있는 것이 아니라 학교가 정하는 말이라, 한 번 적어 두고 쓴다.
+// 링크와 같은 자리(notices)에 담는다 — 읽기는 모두, 쓰기는 관리자.
+const TAIL_ID = noticeId('dailytail', 'all');
+
+/** 저장해 둔 고정 문구. 아직 없으면 null(기본 문구를 쓴다는 뜻). */
+export function dailyTail() {
+  const doc = list('notices').find((n) => n.id === TAIL_ID);
+  return doc && typeof doc.text === 'string' ? doc.text : null;
+}
+
+export function dailyTailMeta() {
+  const doc = list('notices').find((n) => n.id === TAIL_ID);
+  return doc ? { by: doc.by || '', at: doc.at || '' } : null;
+}
+
+/** 관리자만. 빈 글로 저장하면 안내문 아래 문단이 통째로 빠진다. */
+export async function saveDailyTail(text) {
+  await put('notices', {
+    id: TAIL_ID, kind: 'dailytail', key: 'all',
+    text: String(text == null ? '' : text),
+    by: currentUser().name || '', at: new Date().toISOString(),
+  });
+}
