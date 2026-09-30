@@ -1,7 +1,7 @@
 // 나이스 일일교육활동 결재용 문구 · 메신저 안내문 생성
 import { fmtK, byTime, WEEKDAY, parseYmd, CATEGORY } from '../model.js';
 import { describeTime, dayBellId, bellById, defaultBell } from '../conflict.js';
-import { isNoMeal } from '../select.js';
+import { isNoMeal, cleanDetail } from '../select.js';
 
 const KO_ORDER = ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차', '카', '타', '파', '하'];
 const koIdx = (i) => (i < KO_ORDER.length ? KO_ORDER[i] : `${KO_ORDER[i % 14]}${Math.floor(i / 14) + 1}`);
@@ -106,7 +106,8 @@ function itemText(a, date) {
   if (a.place) bits.push(a.place);
   const head = bits.length ? `${a.title}(${bits.join(', ')})` : a.title;
   // 세부 내용은 다음 줄에 그대로 붙인다. 구글시트 주소 같은 것이 여기 들어간다.
-  const detail = String(a.detail || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  // '비급식일' 은 아래 ※ 한 줄로 따로 나가므로 여기서는 뺀다.
+  const detail = cleanDetail(a.detail).split('\n').map((x) => x.trim()).filter(Boolean);
   return [head, ...detail];
 }
 

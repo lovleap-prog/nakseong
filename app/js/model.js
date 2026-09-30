@@ -16,6 +16,23 @@ export const CATEGORY = {
 
 export const ROLE = { admin: '관리자(결재)', teacher: '교사(입력)' };
 
+/**
+ * 음영 강조 색.
+ *
+ * 분류 색은 카드 왼쪽 띠 한 줄뿐이라, 하얀 카드가 죽 늘어서면 그 주에 한 번뿐인
+ * 특별한 활동이 늘 있는 활동에 묻힌다. 관리자가 그런 것에 바탕색을 깔 수 있게 한다.
+ * 분류(무엇인가)와 강조(눈여겨볼 것인가)는 다른 것이라 색을 따로 둔다.
+ */
+export const HILITE = {
+  yellow: { label: '노랑', hint: '꼭 챙길 것' },
+  orange: { label: '주황', hint: '준비물·협조' },
+  pink:   { label: '분홍', hint: '학부모·외부' },
+  green:  { label: '초록', hint: '확정' },
+  blue:   { label: '파랑', hint: '출장·연수' },
+  purple: { label: '보라', hint: '행사' },
+};
+export const hiliteOk = (k) => Object.prototype.hasOwnProperty.call(HILITE, k);
+
 export const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
 
 // ── 날짜 유틸 ───────────────────────────────────────────────
@@ -83,6 +100,8 @@ export function newActivity(partial = {}) {
     // 월간 계획에서 한눈에 보여야 한다.
     needsBus: false,
     busNote: '',        // 몇 시에 어디로, 몇 명 — 배차 신청에 필요한 것
+    // 음영 강조. 빈 값이면 여느 일정과 같다. 관리자만 고른다. (HILITE 의 열쇠말)
+    hl: '',
     status: 'pending',
     source: 'manual',
     createdBy: '', createdAt: new Date().toISOString(),

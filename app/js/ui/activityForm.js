@@ -3,6 +3,7 @@ import { h, openModal, toast, confirmDialog } from '../lib/dom.js';
 import { CATEGORY, STATUS, newActivity, today, fmtK, parseYmd, range } from '../model.js';
 import { put, audit, currentUser, isAdmin } from '../store.js';
 import { bellList, clashReasons } from '../conflict.js';
+import { hilitePicker } from './hilite.js';
 import { holidayOn } from '../lib/holidays.js';
 import { occupancyOn } from '../select.js';
 
@@ -56,6 +57,18 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
     h('label', { class: 'check' }, busChk, '\u{1F68C} 배차가 필요합니다'),
     busWrap);
 
+  // 음영 강조 — 관리자만. 여느 일정과 달리 눈여겨볼 것에 바탕색을 깐다.
+  let hl = a.hl || '';
+  // field() 는 <label> 이라 안에 든 단추가 두 번 눌린다(레이블이 제 컨트롤로 클릭을 또 보낸다).
+  // 색이 켜졌다 바로 꺼져 버려서, 여기서는 label 을 쓰지 않고 칸을 직접 짠다.
+  const hlBox = isAdmin()
+    ? h('div', { class: 'span2 field' },
+      h('span', { class: 'field-label' }, '음영 강조'),
+      hilitePicker(hl, (k) => { hl = k; }),
+      h('span', { class: 'field-hint' },
+        '주간·일일 화면에서 이 일정에 바탕색이 깔립니다. 늘 있는 일정에 묻히지 않게 할 때 쓰세요.'))
+    : null;
+
   // 여러 날 이어지는 일정은 드물다. 종료일 칸은 켤 때만 연다.
   const multiChk = h('input', { type: 'checkbox', checked: !!a.endDate });
   const endWrap = h('div', { class: 'span2 sub-field' });
@@ -83,13 +96,14 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
         '수업공개처럼 이 활동만 다른 시정으로 움직일 때 고르세요. 비워두면 그 날 시정을 따릅니다.'))
       : null,
     h('div', { class: 'span2' }, field('세부 내용', detail)),
+    hlBox,
     h('div', { class: 'span2' }, busBox),
     isAdmin() ? h('div', { class: 'span2' }, field('처리 상태', statusSel, '관리자만 변경할 수 있습니다.')) : null,
   );
 
   // 적은 것이 있는지 본다. 빈 창을 닫을 때까지 물어보면 그것대로 성가시다.
   const snapshot = () => JSON.stringify([...Object.keys(inp).map((k) => inp[k].value), detail.value,
-    catSel.value, bellSel.value, busChk.checked, busNote.value, multiChk.checked]);
+    catSel.value, bellSel.value, busChk.checked, busNote.value, multiChk.checked, hl]);
   let saved = false;
   const at0 = snapshot();
 
@@ -118,6 +132,8 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
           bellId: bellSel.value,
           needsBus: busChk.checked,
           busNote: busChk.checked ? busNote.value.trim() : '',
+          // 강조는 관리자만 고른다. 교사가 고친 것은 그대로 둔다.
+          hl: isAdmin() ? hl : (a.hl || ''),
         });
 
         if (isNew) {

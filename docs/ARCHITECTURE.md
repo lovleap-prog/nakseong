@@ -30,10 +30,11 @@ app/
       hwpx-write.js       결재용 hwpx 생성 · 한글용 HTML 생성
       xlsx-read.js        xlsx 첫 시트 → 2차원 배열
       textparse.js        자유 형식 글 · 표 → 일정 행
-      neis.js             나이스 결재 문구 · 메신저 안내문
+      neis.js             일일 안내문 · 주간/월간 줄글 요약
     ui/
       activityForm.js     일정 입력/수정 모달
       exporter.js         내보내기 모달
+      hilite.js           음영 강조 색 고르개 (관리자)
     views/                탭별 화면 7개
 sheets/Code.gs            구글시트 Apps Script
 docs/                     설정 · 사용 안내
@@ -80,7 +81,9 @@ Firestore의 `onSnapshot` 도 같은 `emit` 을 부르기 때문에,
 |---|---|
 | 분류(교과·행사·안전…) 바꾸기 | `model.js` 의 `CATEGORY` |
 | 장소·부서 자동 인식 목록 늘리기 | `lib/textparse.js` 의 `PLACES`, `DEPTS` |
-| 결재 문구 형식 바꾸기 | `lib/neis.js` 의 `neisApprovalText()` |
+| 일일 안내문 형식 바꾸기 | `lib/neis.js` 의 `dailyPlanText()` |
+| 음영 강조 색 늘리기 | `model.js` 의 `HILITE` + `css/app.css` 의 `.hl-*` |
+| '비급식일' 로 볼 말 늘리기 | `select.js` 의 `NOMEAL_RE` |
 | 위젯 창 크기 | `main.js` 의 `openWidget()` |
 | 색 · 테마 | `css/app.css` 맨 위 `:root` |
 

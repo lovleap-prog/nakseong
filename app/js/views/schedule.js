@@ -4,9 +4,10 @@ import {
   CATEGORY, STATUS, WEEKDAY, fmtK, today, addDays, addMonths,
   weekStart, sundayStart, monthStart, monthEnd, range, parseYmd, isWeekend, ymd, occursOn,
 } from '../model.js';
-import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashesOn, timetableOn, isNoMeal } from '../select.js';
+import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashesOn, timetableOn, isNoMeal, cleanDetail } from '../select.js';
 import { clashLabel, bellList, defaultBell, bellById, dayBellId, bellFor, describeTime } from '../conflict.js';
 import { openActivityForm } from '../ui/activityForm.js';
+import { openHiliteMenu, hlClass } from '../ui/hilite.js';
 import { canDelete, deleteOrRequest, delTitle } from '../del.js';
 import { openDayExport, openPeriodExport } from '../ui/exporter.js';
 import { loadConfig } from '../config.js';
@@ -42,7 +43,8 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
   const chips = [['대상', a.target], ['장소', a.place], ['담당', a.owner], ['계', a.dept]];
   const canEdit = isAdmin() || a.createdBy === currentUser().name;
   const done = isChecked(checkDate, a);
-  const card = h('div', { class: `card cat-${a.category}${a.status === 'pending' ? ' is-pending' : ''}${done ? ' is-done' : ''}${showCheck ? ' has-check' : ''}${clash ? ' is-clash' : ''}` },
+  const detail = cleanDetail(a.detail);
+  const card = h('div', { class: `card cat-${a.category}${hlClass(a)}${a.status === 'pending' ? ' is-pending' : ''}${done ? ' is-done' : ''}${showCheck ? ' has-check' : ''}${clash ? ' is-clash' : ''}` },
     showCheck
       ? h('label', { class: 'card-check', title: done ? '확인 표시 해제' : '확인했으면 체크하세요 (나에게만 보입니다)' },
         h('input', {
@@ -68,12 +70,21 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
       clash ? h('p', { class: 'clash-note' }, '\u26A0 ', clashLabel(clash)) : null,
       // 비고는 좁은 칸에서도 보여준다. '1-5교시 · 6-5-3-4-6년 순' 처럼
       // 시간 표기만으로는 알 수 없는 내용이 여기 들어가기 때문이다.
-      a.detail ? h('p', { class: `card-detail${compact ? ' is-compact' : ''}` }, a.detail) : null,
+      // '비급식일' 은 일정이 아니라 그 날의 성격이라 위쪽 띠 한 줄로 올린다.
+      detail ? h('p', { class: `card-detail${compact ? ' is-compact' : ''}` }, detail) : null,
       !compact && a.status === 'rejected' && a.rejectReason
         ? h('p', { class: 'card-reject' }, `반려 사유: ${a.rejectReason}`) : null),
     !a.isRecurring && canEdit
       ? h('div', { class: 'card-actions' },
         h('button', { class: 'icon-btn', title: '수정', onClick: () => openActivityForm(a, { onSaved: onChange }) }, '✎'),
+        // 강조는 창을 열지 않고 그 자리에서 색만 바꾼다. 여러 건을 훑으며 칠하는 일이라서다.
+        // 늘 쓰던 ✎ 는 자리를 지킨다. 손이 기억하는 자리를 옮기면 잘못 누른다.
+        isAdmin()
+          ? h('button', {
+            class: `icon-btn hl-btn${a.hl ? ' on' : ''}`, title: '음영 강조 색 고르기',
+            onClick: () => openHiliteMenu(a, onChange),
+          }, '\u{1F3A8}')
+          : null,
         h('button', {
           class: `icon-btn danger${a.delReq ? ' on' : ''}`, title: delTitle(a),
           onClick: () => deleteOrRequest(a, onChange),
@@ -127,7 +138,7 @@ function bandNode(b, opt0 = {}) {
   const { compact = false, onClick } = opt0;
   const { a } = b;
   const node = h(onClick ? 'button' : 'div', {
-    class: `band cat-${a.category}${b.cutLeft ? ' cut-l' : ''}${b.cutRight ? ' cut-r' : ''}`,
+    class: `band cat-${a.category}${hlClass(a)}${b.cutLeft ? ' cut-l' : ''}${b.cutRight ? ' cut-r' : ''}`,
     title: `${a.title} (${fmtK(a.date, { year: false })} ~ ${fmtK(a.endDate, { year: false })})`,
     onClick: onClick ? () => onClick(a) : undefined,
   },
@@ -309,7 +320,7 @@ function morePop(label, cls, items) {
 function spanCard(a, day, onChange) {
   const days = range(a.date, a.endDate);
   const nth = days.indexOf(day) + 1;
-  return h('div', { class: `band band-day cat-${a.category}` },
+  return h('div', { class: `band band-day cat-${a.category}${hlClass(a)}` },
     h('span', { class: 'band-text' }, a.title),
     h('span', { class: 'band-meta' },
       `${fmtK(a.date, { year: false })} ~ ${fmtK(a.endDate, { year: false })}`,
@@ -323,6 +334,12 @@ function spanCard(a, day, onChange) {
           class: 'icon-btn', title: '수정',
           onClick: () => openActivityForm(a, { onSaved: onChange }),
         }, '\u270E'),
+        isAdmin()
+          ? h('button', {
+            class: `icon-btn hl-btn${a.hl ? ' on' : ''}`, title: '음영 강조 색 고르기',
+            onClick: () => openHiliteMenu(a, onChange),
+          }, '\u{1F3A8}')
+          : null,
         h('button', {
           class: `icon-btn danger${a.delReq ? ' on' : ''}`, title: delTitle(a),
           onClick: () => deleteOrRequest(a, onChange),
@@ -730,7 +747,7 @@ export function renderMonthly(ctx) {
             isNoMeal(day) ? h('span', { class: 'nomeal-tag sm', title: '비급식일 — 급식 없음' }, '\u{1F37D} 비급식') : null,
             lanes ? h('span', { class: 'month-bandspace' }) : null,
             ...acts.slice(0, 3).map((a) => makeDraggable(h('span', {
-              class: `month-item cat-${a.category}${a.status === 'pending' ? ' is-pending' : ''}`
+              class: `month-item cat-${a.category}${hlClass(a)}${a.status === 'pending' ? ' is-pending' : ''}`
                 + `${a.needsBus ? ' needs-bus' : ''}${a.delReq ? ' is-delreq' : ''}`,
               title: a.needsBus
                 ? `${a.title} — 배차 필요: ${a.busNote || '(내용 없음)'}`

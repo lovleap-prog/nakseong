@@ -4,14 +4,51 @@ import { expandRecurring, afterSchoolOn, occursOn, byTime, range, weekStart, dow
 import { findClashes } from './conflict.js';
 import { holidayOn } from './lib/holidays.js';
 
+// '비급식일' 을 뜻하는 말들. 학교마다 적는 말이 조금씩 다르다.
+const NOMEAL_RE = /^(비급식일?|급식\s*없음|급식\s*미실시|급식\s*안\s*함)$/;
+
 /**
- * 그 날이 비급식일인가. 학사일정 탭에 넣어 둔 것을 본다.
+ * 세부 내용에 섞여 들어온 '비급식일' 표시를 떼어낸다.
+ *
+ * 월중 시트의 비급식일 칸은 그 날 **줄마다** 붙어 들어온다. 그래서 그 날 일정이
+ * 셋이면 카드 아래에 '비급식일' 이 세 번 적혔다. 급식이 없는 것은 일정마다가 아니라
+ * 그 날의 성격이니, 표시는 날 단위로 올리고 세부 내용에서는 지운다.
+ *
+ * @returns {{ text: string, noMeal: boolean }}
+ */
+export function splitNoMeal(text) {
+  let noMeal = false;
+  const kept = String(text || '').split(/\r?\n/).map((line) => line
+    .split(/\s*[,·]\s*/)
+    .filter((piece) => {
+      if (!NOMEAL_RE.test(piece.trim())) return true;
+      noMeal = true;
+      return false;
+    })
+    .join(', ')
+    .trim())
+    .filter(Boolean);
+  return { text: kept.join('\n'), noMeal };
+}
+
+/** 화면·문서에 내보낼 세부 내용 (비급식일 표시를 뺀 것) */
+export const cleanDetail = (text) => splitNoMeal(text).text;
+
+/**
+ * 그 날이 비급식일인가.
+ *
+ * 학사일정 탭에 넣어 둔 것을 먼저 보고, 없으면 그 날 일정의 세부 내용에 붙어 온
+ * 표시를 본다. 붙여넣기로 들어온 자료는 학사일정을 거치지 않기 때문이다.
  *
  * 여태 비급식일은 학사일정 화면과 월중계획 한글 문서에만 있었다. 정작 날마다 보는
  * 일일·주간·월간 화면에는 없어서, 급식이 없는 날을 문서를 열어야 알 수 있었다.
  */
 export function isNoMeal(date) {
-  return list('academic').some((a) => a.kind === 'nomeal' && a.date === date);
+  if (list('academic').some((a) => a.kind === 'nomeal' && a.date === date)) return true;
+  // 기간 일정에는 붙이지 않는다. 시작한 날 하루만 급식이 없는 경우가 대부분이다.
+  // 달력은 42칸을 한 번에 그리므로, 쪼개 보기 전에 '급식' 이 들어 있는지부터 본다.
+  return list('activities').some((a) => a.date === date && a.status !== 'rejected'
+    && String(a.detail || '').includes('급식') && splitNoMeal(a.detail).noMeal);
 }
 
 export function activitiesOn(date, { onlyApproved = false } = {}) {

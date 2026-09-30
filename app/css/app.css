@@ -148,6 +148,46 @@ textarea.input { resize: vertical; line-height: 1.6; }
 .toggle.on { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
 .submit-bar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; padding-top: 4px; }
 
+/* ── 음영 강조 ──────────────────────
+   분류 색은 '무엇인가' 를 뜻하니 그 위에 겹쳐 쓸 수 없다. 관리자가 고른 강조 색은
+   바탕에 깔아, 하얀 카드가 죽 늘어선 주간·일일 화면에서 한 번뿐인 활동이 드러나게 한다. */
+.hl-yellow { --hl: #d9a400; }
+.hl-orange { --hl: #e06c0b; }
+.hl-pink   { --hl: #d6336c; }
+.hl-green  { --hl: #16794a; }
+.hl-blue   { --hl: #1f5eff; }
+.hl-purple { --hl: #7c3aed; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hl-yellow { --hl: #fbbf24; }
+  :root:not([data-theme="light"]) .hl-orange { --hl: #fb923c; }
+  :root:not([data-theme="light"]) .hl-pink   { --hl: #f472b6; }
+  :root:not([data-theme="light"]) .hl-green  { --hl: #4ade80; }
+  :root:not([data-theme="light"]) .hl-blue   { --hl: #5b8bff; }
+  :root:not([data-theme="light"]) .hl-purple { --hl: #a78bfa; }
+}
+.card.is-hl {
+  background: color-mix(in srgb, var(--hl) 15%, var(--panel));
+  border-color: color-mix(in srgb, var(--hl) 40%, var(--line));
+}
+/* 확인 대기의 주황 바탕이 강조보다 앞선다. 승인 여부가 먼저 보여야 한다. */
+.card.is-hl.is-pending { background: var(--warn-bg); }
+.card.is-hl .card-title { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--hl) 60%, transparent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.month-item.is-hl { background: color-mix(in srgb, var(--hl) 22%, transparent); color: var(--hl); font-weight: 600; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hl) 45%, transparent); }
+.band.is-hl { background: color-mix(in srgb, var(--hl) 22%, var(--panel)); color: var(--hl); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hl) 45%, transparent); }
+.widget-list li.is-hl { background: color-mix(in srgb, var(--hl) 14%, transparent); border-radius: 6px; padding-left: 6px; padding-right: 6px; }
+
+/* 색 고르개 */
+.hl-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.hl-swatch {
+  border: 1px solid color-mix(in srgb, var(--hl, var(--line)) 45%, var(--line));
+  background: color-mix(in srgb, var(--hl, var(--panel)) 18%, var(--panel));
+  color: var(--hl, var(--muted)); border-radius: 999px; padding: 5px 12px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer; min-height: 32px;
+}
+.hl-swatch.hl-none { --hl: var(--muted); }
+.hl-swatch.on { box-shadow: 0 0 0 2px color-mix(in srgb, var(--hl, var(--muted)) 55%, transparent); }
+.icon-btn.hl-btn.on { color: var(--warn); }
+
 /* ── 일정 카드 ──────────────────────── */
 .card {
   display: grid; grid-template-columns: 78px 1fr auto; gap: 10px;
@@ -301,6 +341,14 @@ body.widget { background: var(--panel); }
 .w-time { font-size: 12px; color: var(--muted); min-width: 58px; font-weight: 600; }
 .w-title { font-weight: 600; }
 .w-place { font-size: 11.5px; color: var(--muted); }
+.widget-nomeal { background: #fff4e5; border: 1px solid #fcd9a8; color: #8a4b08; border-radius: 8px; padding: 6px 9px; font-size: 12.5px; font-weight: 600; margin-bottom: 9px; }
+.widget-notice { background: #fffbea; border: 1px solid #f2e2ae; border-radius: 8px; padding: 7px 9px; margin-bottom: 10px; }
+.widget-notice h4 { font-size: 12.5px; color: #8a6d1d; margin: 0 0 4px; display: flex; align-items: center; gap: 4px; }
+.widget-notice ul { list-style: none; margin: 0; padding: 0; }
+.widget-notice li { font-size: 12.5px; padding: 3px 0; border-top: 1px solid #f2e7c4; display: flex; gap: 6px; align-items: baseline; }
+.widget-notice li:first-child { border-top: 0; }
+.wn-text { flex: 1; white-space: pre-wrap; word-break: break-word; }
+.wn-by { color: var(--muted); font-size: 11px; flex: 0 0 auto; }
 .widget-after { margin-top: 12px; border-top: 2px solid var(--line); padding-top: 8px; }
 .widget-after h4 { font-size: 12.5px; color: var(--cat-afterschool); margin-bottom: 4px; }
 .widget-after ul { margin: 0; padding-left: 16px; font-size: 12.5px; color: var(--muted); }

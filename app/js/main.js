@@ -18,9 +18,11 @@ import { renderAfterSchool } from './views/afterschool.js';
 import { renderApprovals } from './views/approvals.js';
 import { renderImporter } from './views/importer.js';
 import { renderSettings } from './views/settings.js';
-import { dayBundle, pendingList, myPendingCount } from './select.js';
+import { dayBundle, pendingList, myPendingCount, isNoMeal } from './select.js';
+import { postsIn } from './views/board.js';
 import { isChecked, toggleCheck } from './checks.js';
 import { openDayExport } from './ui/exporter.js';
+import { hlClass } from './ui/hilite.js';
 import { ROLE } from './model.js';
 
 const TABS = [
@@ -332,6 +334,9 @@ function openWidget() {
 function renderWidget() {
   const b = dayBundle(state.date, { onlyApproved: true });
   const items = [...b.activities, ...b.recurring];
+  // 공지는 큰 화면에만 있었다. 그런데 위젯은 하루 내내 한쪽에 띄워 두는 창이라,
+  // 공문 접수·안내장 수합 같은 알림은 오히려 여기서 봐야 한다. 읽기만 한다.
+  const posts = postsIn(state.date, state.date);
   return h('div', { class: 'widget-wrap' },
     h('div', { class: 'widget-top' },
       h('button', { class: 'icon-btn', onClick: () => ctx.setDate(addDays(state.date, -1)) }, '‹'),
@@ -339,10 +344,20 @@ function renderWidget() {
       h('button', { class: 'icon-btn', onClick: () => ctx.setDate(addDays(state.date, 1)) }, '›'),
       h('button', { class: 'btn btn-sm', onClick: () => ctx.setDate(today()) }, '오늘')),
     h('div', { class: 'widget-body' },
+      isNoMeal(state.date)
+        ? h('div', { class: 'widget-nomeal' }, '\u{1F37D} 비급식일 — 급식이 없습니다')
+        : null,
+      posts.length
+        ? h('div', { class: 'widget-notice' },
+          h('h4', {}, '\u{1F4E2} 공지 ', h('span', { class: 'sec-count' }, posts.length)),
+          h('ul', {}, ...posts.map((p) => h('li', {},
+            h('span', { class: 'wn-text' }, p.text || ''),
+            p.by ? h('span', { class: 'wn-by' }, p.by) : null))))
+        : null,
       items.length
         ? h('ul', { class: 'widget-list' }, ...items.map((a) => {
           const done = isChecked(state.date, a);
-          return h('li', { class: done ? 'is-done' : '' },
+          return h('li', { class: `${done ? 'is-done' : ''}${hlClass(a)}`.trim() },
             h('input', {
               type: 'checkbox', class: 'w-check', checked: done,
               title: '확인했으면 체크하세요 (나에게만 보입니다)',
@@ -361,7 +376,7 @@ function renderWidget() {
         : null),
     h('div', { class: 'widget-foot' },
       ...linkButtons().slice(0, 1),
-      h('button', { class: 'btn btn-sm', onClick: () => openDayExport(state.date) }, '결재문구'),
+      h('button', { class: 'btn btn-sm', onClick: () => openDayExport(state.date) }, '일일 안내문'),
       h('button', {
         class: 'btn btn-sm',
         onClick: () => window.open(`${location.pathname}#/daily/${state.date}`, 'sam-main'),

@@ -9,7 +9,7 @@ import {
 } from '../model.js';
 import { describeTime } from '../conflict.js';
 import { holidayOn } from './holidays.js';
-import { activitiesOn, recurringOn } from '../select.js';
+import { activitiesOn, recurringOn, isNoMeal, cleanDetail } from '../select.js';
 import { loadConfig } from '../config.js';
 
 /**
@@ -73,7 +73,7 @@ const timeCell = (t) => {
 /** 주요 업무 내용 칸 — 제목 아래에 세부 내용을 '- ' 로 붙인다. */
 function workText(a) {
   const head = a.target ? `${a.title}(${a.target})` : a.title;
-  const detail = String(a.detail || '')
+  const detail = cleanDetail(a.detail)
     .split('\n').map((s) => s.trim()).filter(Boolean)
     .map((s) => (/^[-·•]/.test(s) ? s : `- ${s}`));
   return lines(head, ...detail);
@@ -236,8 +236,7 @@ export function weeklyForm(from, to, { timetable = true } = {}) {
 
 /** 그 주의 비급식일을 '10.2.(금)' 꼴로 이어 붙인다. 없으면 빈 글. */
 function noMealIn(from, to) {
-  const days = new Set(list('academic').filter((a) => a.kind === 'nomeal' && a.date).map((a) => a.date));
-  return range(from, to).filter((d) => days.has(d)).map((d) => {
+  return range(from, to).filter(isNoMeal).map((d) => {
     const dt = parseYmd(d);
     return `${dt.getMonth() + 1}.${dt.getDate()}.(${WEEKDAY[dt.getDay()]})`;
   }).join(', ');
@@ -275,7 +274,8 @@ export function monthlyForm(first) {
   const month = d0.getMonth() + 1;
 
   const aca = list('academic');
-  const noMeal = new Set(aca.filter((a) => a.kind === 'nomeal' && a.date).map((a) => a.date));
+  // 학사일정에 넣어 둔 것과, 붙여넣기로 들어와 세부 내용에 붙은 표시를 함께 본다.
+  const noMeal = new Set(range(first, last).filter(isNoMeal));
   const stat = aca.find((a) => a.kind === 'stat');
   const monthDays = stat && stat.stats
     ? (stat.stats.months || []).find((m) => m.month === month)
