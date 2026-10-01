@@ -39,7 +39,7 @@ export function statusBadge(a, { showAll = false } = {}) {
  * @param checkDate  이 날짜 기준으로 내 체크 상태를 반영한다(빈 값이면 체크 개념 없음)
  * @param showCheck  체크박스를 그릴지. 주간 화면은 상태만 반영하고 체크박스는 안 그린다.
  */
-export function activityCard(a, { compact = false, onChange, checkDate = '', showCheck = false, showStatus = false, clash = null, showDate = false } = {}) {
+export function activityCard(a, { compact = false, onChange, checkDate = '', showCheck = false, showStatus = false, clash = null, showDate = false, onOpen = null } = {}) {
   const chips = [['대상', a.target], ['장소', a.place], ['담당', a.owner], ['계', a.dept]];
   const canEdit = isAdmin() || a.createdBy === currentUser().name;
   const done = isChecked(checkDate, a);
@@ -91,15 +91,67 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
         }, '✕'))
       : null);
 
+  // 좁은 칸(주간)에서는 눌러서 그 날 일일 화면으로 간다.
+  // 칸이 좁아 담당·장소가 접히고 세부 내용이 잘리는데, 여태 눌러도 아무 일이 없었다.
+  // 월간은 칸을 누르면 일일로 가는데 주간만 그러지 않아 선생님들이 막다른 길을 만났다.
+  if (onOpen) {
+    card.classList.add('is-openable');
+    const fire = () => onOpen(a);
+    card.addEventListener('click', (e) => {
+      // 안에 든 단추·체크칸을 누른 것이면 그쪽 일이다.
+      if (e.target.closest('button, input, select, textarea, a, label')) return;
+      fire();
+    });
+    card.tabIndex = 0;
+    card.setAttribute('role', 'link');
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); }
+    });
+  }
+
   // 좁은 칸(주간)에서만 끌어 옮긴다. 일일 화면은 세로 목록이라 끌 곳이 없다.
   if (compact && canMove(a)) {
     makeDraggable(card, a);
-    card.title = '끌어서 다른 날짜로 옮길 수 있습니다';
+    card.title = onOpen
+      ? '눌러서 자세히 보기 · 끌어서 다른 날짜로 옮기기'
+      : '끌어서 다른 날짜로 옮길 수 있습니다';
+  } else if (onOpen) {
+    card.title = '눌러서 자세히 보기';
   }
-  return card;
+  // 테를 두르는 것은 건너온 쪽(일일)의 넓은 카드다. 주간의 좁은 카드가 먼저
+  // 가져가 버리면(날짜를 옮기며 주간이 한 번 더 그려진다) 정작 일일에서는 표가 안 난다.
+  return compact ? card : flashIfOpened(card, a);
 }
 
 function emptyBox(msg) { return h('div', { class: 'empty' }, msg); }
+
+/**
+ * 주간에서 눌러 일일로 건너온 일정의 id.
+ *
+ * 주간 칸은 좁아 제목과 몇 줄만 보인다. 눌러서 그 날 일일 화면으로 가게 했는데,
+ * 그 날 일정이 열 건이면 내가 누른 것이 어디 있는지 또 찾아야 한다. 건너온 뒤
+ * 그 카드로 화면을 옮기고 잠깐 테를 둘러 둔다. 한 번 쓰고 비운다.
+ */
+let openedId = '';
+
+/** 주간·월간에서 누른 일정을 그 날 일일 화면에서 연다. */
+function openOnDay(ctx, day, a) {
+  openedId = a.id;
+  ctx.setDate(day);
+  ctx.go('daily');
+}
+
+/** 건너온 그 카드면 화면을 옮기고 잠깐 테를 두른다. */
+function flashIfOpened(node, a) {
+  if (!openedId || a.id !== openedId) return node;
+  openedId = '';
+  node.classList.add('is-opened');
+  setTimeout(() => {
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(() => node.classList.remove('is-opened'), 2400);
+  }, 60);
+  return node;
+}
 
 /** 여러 날에 걸치는 일정인가 */
 export const isSpan = (a) => !!(a.endDate && a.endDate > a.date);
@@ -320,7 +372,7 @@ function morePop(label, cls, items) {
 function spanCard(a, day, onChange) {
   const days = range(a.date, a.endDate);
   const nth = days.indexOf(day) + 1;
-  return h('div', { class: `band band-day cat-${a.category}${hlClass(a)}` },
+  return flashIfOpened(h('div', { class: `band band-day cat-${a.category}${hlClass(a)}` },
     h('span', { class: 'band-text' }, a.title),
     h('span', { class: 'band-meta' },
       `${fmtK(a.date, { year: false })} ~ ${fmtK(a.endDate, { year: false })}`,
@@ -344,7 +396,7 @@ function spanCard(a, day, onChange) {
           class: `icon-btn danger${a.delReq ? ' on' : ''}`, title: delTitle(a),
           onClick: () => deleteOrRequest(a, onChange),
         }, '\u2715'))
-      : null);
+      : null), a);
 }
 
 /** 7칸짜리 띠 영역 (주간·월간 공통) */
@@ -656,10 +708,19 @@ export function renderWeekly(ctx) {
           onClick: () => openActivityForm(null, { defaultDate: day, onSaved: rerender }),
         }, '\uFF0B'),
         h('div', { class: 'week-body' },
-          ...acts.map((a) => activityCard(a, { compact: true, onChange: rerender, checkDate: day })),
-          ...recs.map((a) => activityCard(a, { compact: true, checkDate: day })),
+          ...acts.map((a) => activityCard(a, {
+            compact: true, onChange: rerender, checkDate: day,
+            onOpen: () => openOnDay(ctx, day, a),
+          })),
+          ...recs.map((a) => activityCard(a, {
+            compact: true, checkDate: day,
+            onOpen: () => openOnDay(ctx, day, a),
+          })),
           b.afterSchool.length
-            ? h('div', { class: 'mini-after' }, `방과후 ${b.afterSchool.length}강좌`)
+            ? h('button', {
+              class: 'mini-after', title: `${fmtK(day, { year: false })} 방과후 강좌 보기`,
+              onClick: () => { ctx.setDate(day); ctx.go('daily'); },
+            }, `방과후 ${b.afterSchool.length}강좌`)
             : null,
           empty ? h('div', { class: 'empty sm' }, '—') : null));
       return makeDropTarget(col, day);
@@ -674,7 +735,11 @@ function weekBands(from, to, ctx) {
   const bands = layoutBands(spans, from, to);
   return h('div', { class: 'week-bandwrap' },
     h('div', { class: 'band-label' }, '기간 운영'),
-    bandGrid(bands, { onClick: (a) => { ctx.setDate(a.date); ctx.go('daily'); }, onChange: () => ctx.refresh() }));
+    bandGrid(bands, {
+      // 지난 주에 시작한 것이면 그 시작일이 아니라 보고 있는 주의 첫날로 간다.
+      onClick: (a) => openOnDay(ctx, a.date < from ? from : a.date, a),
+      onChange: () => ctx.refresh(),
+    }));
 }
 
 /**
@@ -751,7 +816,9 @@ export function renderMonthly(ctx) {
                 + `${a.needsBus ? ' needs-bus' : ''}${a.delReq ? ' is-delreq' : ''}`,
               title: a.needsBus
                 ? `${a.title} — 배차 필요: ${a.busNote || '(내용 없음)'}`
-                : (canMove(a) ? `${a.title} — 끌어서 옮기기` : a.title),
+                : (canMove(a) ? `${a.title} — 눌러서 자세히, 끌어서 옮기기` : `${a.title} — 눌러서 자세히`),
+              // 칸 전체를 눌러도 그 날로 가지만, 일정을 콕 집어 누르면 그 카드로 데려간다.
+              onClick: (e) => { e.stopPropagation(); openOnDay(ctx, day, a); },
             },
               a.needsBus ? h('span', { class: 'bus-dot' }, '\u{1F68C}') : null,
               h('span', { class: 'mi-text' }, a.title),
@@ -773,7 +840,7 @@ export function renderMonthly(ctx) {
               : null);
           return makeDropTarget(cell, day);
         })),
-        bandGrid(bands, { compact: true, onClick: (a) => goDay(a.date), onChange: () => ctx.refresh() }));
+        bandGrid(bands, { compact: true, onClick: (a) => openOnDay(ctx, a.date, a), onChange: () => ctx.refresh() }));
     }),
 
     // 배차가 필요한 활동만 따로 모은다.
