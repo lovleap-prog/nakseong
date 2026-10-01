@@ -730,6 +730,16 @@ body.dragging-now .band-grid { pointer-events: none; }
 }
 .sub-wrap { background: var(--warn-bg); border-radius: 8px; padding: 10px 12px; }
 
+/* 앞으로 못 정한 보결 — 한 줄. 오늘 할 일이 아니라 곧 할 일이라 조용히 둔다. */
+.sub-ahead {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--muted);
+  border: 1px dashed color-mix(in srgb, var(--warn) 45%, var(--line));
+  border-radius: 8px; padding: 6px 10px; margin-bottom: 10px;
+}
+.sub-ahead b { color: var(--warn); }
+.sub-ahead .btn { margin-left: auto; }
+
 /* ── 보결 배정 체크리스트 ──────────────────
    보결이 필요한 날에만 뜬다. 할 일이 없는 날까지 자리를 차지하면 눈이 지나친다. */
 .sec-sub.is-left { background: var(--warn-bg); }
@@ -752,7 +762,10 @@ body.dragging-now .band-grid { pointer-events: none; }
 .row-todo td { background: var(--warn-bg); }
 
 /* 배정 창 — 교시 · 학급 · 들어갈 분 · 비고 */
-.sub-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 32px; gap: 6px; align-items: center; margin: 8px 0; }
+.sub-grid { display: grid; grid-template-columns: 1fr 1fr 1.2fr 1fr 32px; gap: 6px; align-items: start; margin: 8px 0; }
+.sub-cell { display: grid; gap: 3px; min-width: 0; }
+.sub-hint { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+.input-sm { padding: 3px 7px; font-size: 12.5px; min-height: 28px; }
 .sub-h { font-size: 12px; color: var(--muted); font-weight: 700; }
 .sub-form .input { min-width: 0; }
 

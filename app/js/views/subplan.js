@@ -29,6 +29,9 @@ export function planRows(t) {
       period: String(r.period || '').trim(),
       klass: String(r.klass || '').trim(),
       teacher: String(r.teacher || '').trim(),
+      // 누구인지는 이름이 아니라 **로그인 계정**으로 잡는다. 같은 이름이 둘일 수도 있고,
+      // 이름을 한 글자만 달리 적어도 그분 화면에 뜨지 않기 때문이다.
+      uid: String(r.uid || '').trim(),
       note: String(r.note || '').trim(),
     }));
 }
@@ -58,19 +61,92 @@ const rowText = (r) => {
   return `${left ? `${left} ` : ''}→ ${right}${r.note ? ` (${r.note})` : ''}`;
 };
 
-/** 그 날 내가 들어가야 하는 보결 */
-export function mySubs(date, name) {
-  if (!name) return [];
+/**
+ * 그 날 내가 들어가야 하는 보결.
+ * 계정(uid)으로 먼저 보고, 계정이 없는 옛 자료만 이름으로 본다.
+ */
+export function mySubs(date, name, uid = '') {
+  const me = currentUser();
+  const myUid = uid || me.uid || '';
+  const myName = name || me.name || '';
+  if (!myUid && !myName) return [];
   const out = [];
   for (const t of subTrips(date)) {
-    for (const r of planRows(t)) if (r.teacher === name) out.push({ trip: t, row: r });
+    for (const r of planRows(t)) {
+      const hit = r.uid ? r.uid === myUid : (!!myName && r.teacher === myName);
+      if (hit) out.push({ trip: t, row: r });
+    }
   }
   return out;
+}
+
+/** 앱에 로그인한(승인된) 선생님들 — 배정에서 고를 사람들 */
+export function appMembers() {
+  return list('members')
+    .filter((m) => m.approved && m.name)
+    .slice()
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+/**
+ * 이 줄의 사람이 앱에 있는 분인가.
+ * 아니면 정해 두어도 그분 화면에는 뜨지 않으니, 그것을 숨기지 않고 적어 둔다.
+ */
+export function rowReaches(r) {
+  if (!r.teacher) return 'blank';
+  if (r.uid) return 'ok';
+  return appMembers().some((m) => m.name === r.teacher) ? 'ok' : 'offapp';
+}
+
+/** '1학년' 의 담임이 누구인가. [설정] → 명단 에 적어 둔 것을 본다. */
+export function homeroomOf(klass) {
+  const key = String(klass || '').replace(/\s+/g, '');
+  if (!key) return null;
+  return appMembers().find((m) => String(m.homeroom || '').replace(/\s+/g, '') === key) || null;
 }
 
 /** 그 날 아직 사람이 안 정해진 보결이 몇 건인가 (요약 줄의 주황 표시에 쓴다) */
 export function unassignedCount(date) {
   return subTrips(date).filter((t) => planState(t) !== 'done').length;
+}
+
+/**
+ * 앞으로 며칠 안에 아직 사람을 못 정한 보결이 있는 날들.
+ * 오늘은 뺀다. 오늘 것은 바로 아래 체크리스트가 이미 다 보여주고 있다.
+ */
+export function unassignedAhead(fromDate, days = 14) {
+  const until = (() => {
+    const d = parseYmd(fromDate); d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const out = new Set();
+  for (const t of list('trips')) {
+    if (!t.needsSub || t.status === 'rejected') continue;
+    if (t.date <= fromDate || t.date > until) continue;
+    if (planState(t) !== 'done') out.add(t.date);
+  }
+  return [...out].sort();
+}
+
+/**
+ * 앞으로 못 정한 것이 있으면 한 줄로만 알린다. 관리자만 본다.
+ *
+ * 크게 띄우지 않는다. 오늘 할 일이 아니라 '곧 해야 할 일' 이고, 날마다 보는 화면에
+ * 큰 상자가 하나 더 늘면 정작 오늘 것이 묻힌다. 없으면 아무것도 그리지 않는다.
+ */
+export function aheadLine(date, ctx) {
+  if (!isAdmin()) return null;
+  const days = unassignedAhead(date);
+  if (!days.length) return null;
+  const shown = days.slice(0, 3).map((d) => fmtK(d, { year: false })).join(', ');
+  return h('div', { class: 'sub-ahead' },
+    h('span', {}, '\u{1F64B} 앞으로 보결을 못 정한 날 ',
+      h('b', {}, `${days.length}일`), ' — ', shown,
+      days.length > 3 ? ` 외 ${days.length - 3}일` : ''),
+    h('button', {
+      class: 'btn btn-sm',
+      onClick: () => { ctx.setDate(days[0]); },
+    }, `${fmtK(days[0], { year: false })} 보기`));
 }
 
 /** 적어 넣을 때 고를 이름들 — 업무분장 명단과 로그인 명단을 합친다. */
@@ -127,7 +203,11 @@ export function subBox(date, refresh) {
           rows.length
             ? h('ul', { class: 'sub-rows' }, ...rows.map((r) => h('li', {
               class: r.teacher ? '' : 'is-blank',
-            }, rowText(r))))
+            }, rowText(r),
+            // 앱에 없는 분이면 그분 화면에는 뜨지 않는다. 숨기지 않고 적어 둔다.
+            rowReaches(r) === 'offapp'
+              ? h('span', { class: 'sub-hint warn-text' }, ' 앱을 쓰지 않는 분 — 따로 알려주세요')
+              : null)))
             : h('p', { class: 'sub-ask warn-text' }, '아직 들어갈 분을 정하지 않았습니다.')),
         h('button', {
           class: `btn btn-sm${planState(t) === 'done' ? '' : ' btn-primary'}`,
@@ -163,8 +243,12 @@ export function mySubBar(date) {
 // ── 배정 창 ─────────────────────────────────────────────────
 export function openSubForm(trip, onSaved) {
   const rows = planRows(trip);
-  if (!rows.length) rows.push({ period: '', klass: '', teacher: '', note: '' });
+  const blank = () => ({ period: '', klass: '', teacher: '', uid: '', note: '' });
+  if (!rows.length) rows.push(blank());
 
+  // 들어갈 분은 **앱에 로그인한 분 중에서 고른다.** 이름을 손으로 치면 한 글자만 달라도
+  // 그분 화면에 뜨지 않는다. 계정이 없는 분(강사·실무사)은 따로 적되, 뜨지 않는다고 알린다.
+  const members = appMembers();
   const names = teacherNames();
   const listId = 'sub-names';
   const dl = h('datalist', { id: listId }, ...names.map((n) => h('option', { value: n })));
@@ -174,24 +258,71 @@ export function openSubForm(trip, onSaved) {
 
   const draw = () => {
     clear(table);
-    table.appendChild(h('span', { class: 'sub-h' }, '교시'));
-    table.appendChild(h('span', { class: 'sub-h' }, '학급·과목'));
-    table.appendChild(h('span', { class: 'sub-h' }, '들어갈 분'));
-    table.appendChild(h('span', { class: 'sub-h' }, '비고'));
-    table.appendChild(h('span', { class: 'sub-h' }, ''));
+    for (const t of ['교시', '학급·과목', '들어갈 분', '비고', '']) {
+      table.appendChild(h('span', { class: 'sub-h' }, t));
+    }
     rows.forEach((r, i) => {
       const mk = (key, ph, extra = {}) => {
         const el = h('input', { class: 'input', value: r[key] || '', placeholder: ph, ...extra });
         el.addEventListener('input', () => { r[key] = el.value; });
         return el;
       };
+
       table.appendChild(mk('period', '예) 1-2교시'));
-      table.appendChild(mk('klass', '예) 5학년'));
-      table.appendChild(mk('teacher', '이름', { list: listId }));
+
+      // 학급 — 담임이 누구인지 적어 준다. '1학년' 만 보고는 누구 반인지 알 수 없어서다.
+      const klassWrap = h('div', { class: 'sub-cell' });
+      const klassIn = h('input', { class: 'input', value: r.klass || '', placeholder: '예) 5학년' });
+      const hint = h('span', { class: 'sub-hint' });
+      const syncHint = () => {
+        const hr = homeroomOf(klassIn.value);
+        hint.textContent = hr ? `${klassIn.value.trim()} 담임: ${hr.name}` : '';
+      };
+      klassIn.addEventListener('input', () => { r.klass = klassIn.value; syncHint(); });
+      syncHint();
+      klassWrap.append(klassIn, hint);
+      table.appendChild(klassWrap);
+
+      // 들어갈 분 — 명단에서 고른다
+      const who = h('div', { class: 'sub-cell' });
+      if (members.length) {
+        const sel = h('select', { class: 'input' },
+          h('option', { value: '' }, '— 아직 안 정함 —'),
+          ...members.map((m) => h('option', {
+            value: m.id, selected: r.uid ? r.uid === m.id : r.teacher === m.name,
+          }, m.name + (m.homeroom ? ` (${m.homeroom})` : ''))),
+          h('option', {
+            value: '__other',
+            selected: !!r.teacher && !r.uid && !members.some((m) => m.name === r.teacher),
+          }, '명단에 없는 분 (직접 적기)'));
+        const other = h('input', {
+          class: 'input', value: r.uid ? '' : (r.teacher || ''), placeholder: '이름', list: listId,
+        });
+        const warn = h('span', { class: 'sub-hint warn-text' });
+        const sync = () => {
+          const isOther = sel.value === '__other';
+          other.style.display = isOther ? '' : 'none';
+          if (isOther) { r.uid = ''; r.teacher = other.value.trim(); } else if (sel.value) {
+            const m = members.find((x) => x.id === sel.value);
+            r.uid = m ? m.id : ''; r.teacher = m ? m.name : '';
+          } else { r.uid = ''; r.teacher = ''; }
+          warn.textContent = isOther && r.teacher
+            ? '앱을 쓰지 않는 분이라 그분 화면에는 뜨지 않습니다. 따로 알려주세요.' : '';
+        };
+        sel.addEventListener('change', sync);
+        other.addEventListener('input', sync);
+        sync();
+        who.append(sel, other, warn);
+      } else {
+        // 명단이 없는 방식(이 컴퓨터에만 저장)에서는 전처럼 이름을 적는다.
+        who.append(mk('teacher', '이름', { list: listId }));
+      }
+      table.appendChild(who);
+
       table.appendChild(mk('note', '예) 수학 문제집'));
       table.appendChild(h('button', {
         class: 'icon-btn danger', title: '이 줄 지우기', type: 'button',
-        onClick: () => { rows.splice(i, 1); if (!rows.length) rows.push({ period: '', klass: '', teacher: '', note: '' }); draw(); },
+        onClick: () => { rows.splice(i, 1); if (!rows.length) rows.push(blank()); draw(); },
       }, '✕'));
     });
   };
@@ -207,14 +338,14 @@ export function openSubForm(trip, onSaved) {
     table, dl,
     h('button', {
       class: 'btn btn-sm', type: 'button',
-      onClick: () => { rows.push({ period: '', klass: '', teacher: '', note: '' }); draw(); },
+      onClick: () => { rows.push(blank()); draw(); },
     }, '+ 줄 추가'),
     h('p', { class: 'muted small' },
       "들어갈 분을 비워 두면 '덜 됨' 으로 남습니다. 정해지면 다시 와서 채우세요."));
 
   // 요청 글을 보고 '1-2교시: 5학년/3교시: 3학년' 같은 줄을 미리 끊어 넣어 준다.
   if (!planRows(trip).length && trip.subNote) {
-    const guess = parseAsk(trip.subNote);
+    const guess = parseAsk(trip.subNote).map((g) => ({ ...g, uid: '' }));
     if (guess.length) {
       rows.length = 0;
       rows.push(...guess);
@@ -232,7 +363,8 @@ export function openSubForm(trip, onSaved) {
         const keep = rows
           .map((r) => ({
             period: String(r.period || '').trim(), klass: String(r.klass || '').trim(),
-            teacher: String(r.teacher || '').trim(), note: String(r.note || '').trim(),
+            teacher: String(r.teacher || '').trim(), uid: String(r.uid || '').trim(),
+            note: String(r.note || '').trim(),
           }))
           .filter((r) => r.period || r.klass || r.teacher);
         const before = { ...trip };

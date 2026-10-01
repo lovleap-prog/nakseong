@@ -21,7 +21,7 @@ import { memoPanel, memoComposer } from './memoview.js';
 import { memosOn, memosBetween } from '../memo.js';
 import { academicOn } from './academic.js';
 import { tripsOn, openTripForm } from './trips.js';
-import { subBox, mySubBar, unassignedCount, planState, planRows } from './subplan.js';
+import { subBox, mySubBar, aheadLine, unassignedCount, planState, planRows } from './subplan.js';
 
 // ── 공통 조각 ───────────────────────────────────────────────
 /**
@@ -558,6 +558,9 @@ export function renderDaily(ctx) {
         isAdmin() ? h('button', { class: 'btn btn-sm', onClick: () => ctx.go('approvals') }, '승인함에서 처리') : null)
       : null,
 
+    // 앞으로 못 정한 보결이 있으면 한 줄로만. 관리자만 본다.
+    aheadLine(d, ctx),
+
     // 보결이 필요한 날에만 뜨는 체크리스트. 관리자만 본다.
     // '확인 대기' 바로 아래 둔다. 그 날 관리 선생님이 해야 할 일이고, 아침에 화면을
     // 내리기 전에 눈에 들어와야 그 날 수업이 빈 채로 시작되지 않는다.
@@ -636,14 +639,15 @@ export function renderDaily(ctx) {
           // 보결을 들어갈 선생님이 알아야 할 건 '몇 교시·몇 반' 이다. 마우스를 올려야
           // 보이던 것을 칩에 그대로 붙인다(휴대전화에는 마우스가 없다).
           t.needsSub ? h('span', { class: 'badge badge-sub' }, '보결') : null,
-          // 배정이 끝났으면 요청 글 대신 '누가 들어가는지' 를 적는다. 그것이 알고 싶은 것이다.
+          // 관리자에게는 '누가 들어가는지' 를, 다른 분들께는 전처럼 요청 글만 적는다.
+          // 들어가실 분은 맨 위 띠로 따로 알고 있으니, 모두의 화면에 이름을 늘어놓지 않는다.
           t.needsSub
             ? h('span', { class: 'trip-sub-note' },
-              planState(t) === 'done'
+              isAdmin() && planState(t) === 'done'
                 ? planRows(t).map((r) => `${[r.period, r.klass].filter(Boolean).join(' ')} ${r.teacher}`).join(' / ')
                 : (t.subNote || '교시 미기재'))
             : null,
-          t.needsSub && planState(t) !== 'done'
+          t.needsSub && isAdmin() && planState(t) !== 'done'
             ? h('span', { class: 'badge st-rejected' }, '미배정') : null)))
         : h('div', { class: 'empty' }, '이 날짜에 등록된 출장이 없습니다.')),
 

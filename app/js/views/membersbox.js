@@ -45,6 +45,13 @@ export function membersBox(ctx) {
       h('td', {}, h('b', {}, m.name || '(이름 없음)'), isMe ? h('span', { class: 'chip chip-me' }, '나') : null),
       h('td', { class: 'mono small' }, m.email || ''),
       h('td', {}, m.dept || ''),
+      // 담임 학급. 보결을 정할 때 '1학년' 이 누구 반인지 알려면 이것이 있어야 한다.
+      h('td', {}, h('input', {
+        class: 'input input-sm', value: m.homeroom || '', placeholder: '예) 1학년',
+        title: '담임 학급. 보결을 정할 때 그 반이 누구 반인지 알려 줍니다.',
+        onChange: (e) => change(m, { homeroom: e.target.value.trim() },
+          e.target.value.trim() ? `${m.name || ''} — ${e.target.value.trim()} 담임으로 적었습니다.` : '담임 학급을 비웠습니다.'),
+      })),
       h('td', {}, m.approved
         ? h('span', { class: 'chip chip-ok' }, '승인됨')
         : h('span', { class: 'chip chip-wait' }, '대기')),
@@ -112,7 +119,7 @@ export function membersBox(ctx) {
       ? h('div', { class: 'table-wrap' },
           h('table', { class: 'tbl mem-tbl' },
             h('thead', {}, h('tr', {},
-              h('th', {}, '이름'), h('th', {}, '계정'), h('th', {}, '부서'),
+              h('th', {}, '이름'), h('th', {}, '계정'), h('th', {}, '부서'), h('th', {}, '담임'),
               h('th', {}, '상태'), h('th', {}, '역할'), h('th', {}, '처음 로그인'), h('th', {}, ''))),
             h('tbody', {}, ...rows.map(row))))
       : h('p', { class: 'muted' }, '아직 로그인한 사람이 없습니다.'),
