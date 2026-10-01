@@ -20,6 +20,7 @@ import { renderImporter } from './views/importer.js';
 import { renderSettings } from './views/settings.js';
 import { dayBundle, pendingList, myPendingCount, isNoMeal } from './select.js';
 import { postsIn } from './views/board.js';
+import { mySubs } from './views/subplan.js';
 import { isChecked, toggleCheck } from './checks.js';
 import { openDayExport } from './ui/exporter.js';
 import { hlClass } from './ui/hilite.js';
@@ -344,6 +345,16 @@ function renderWidget() {
       h('button', { class: 'icon-btn', onClick: () => ctx.setDate(addDays(state.date, 1)) }, '›'),
       h('button', { class: 'btn btn-sm', onClick: () => ctx.setDate(today()) }, '오늘')),
     h('div', { class: 'widget-body' },
+      // 내가 보결로 들어가는 날이면 위젯에도 뜬다. 하루 내내 띄워 두는 창이라 여기서 본다.
+      (() => {
+        const mine = mySubs(state.date, currentUser().name);
+        if (!mine.length) return null;
+        return h('div', { class: 'widget-mysub' },
+          h('h4', {}, `\u{1F64B} 내 보결 ${mine.length}건`),
+          h('ul', {}, ...mine.map(({ trip, row }) => h('li', {},
+            h('strong', {}, [row.period, row.klass].filter(Boolean).join(' ') || '교시 미기재'),
+            ` — ${trip.applicant || ''} 출장`))));
+      })(),
       isNoMeal(state.date)
         ? h('div', { class: 'widget-nomeal' }, '\u{1F37D} 비급식일 — 급식이 없습니다')
         : null,

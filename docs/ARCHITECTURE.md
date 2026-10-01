@@ -83,6 +83,7 @@ Firestore의 `onSnapshot` 도 같은 `emit` 을 부르기 때문에,
 | 장소·부서 자동 인식 목록 늘리기 | `lib/textparse.js` 의 `PLACES`, `DEPTS` |
 | 일일 안내문 형식 바꾸기 | `lib/neis.js` 의 `dailyPlanText()` |
 | 음영 강조 색 늘리기 | `model.js` 의 `HILITE` + `css/app.css` 의 `.hl-*` |
+| 보결 배정 · 알림 | `views/subplan.js` (체크리스트 · 배정 창 · 메신저 글) |
 | '비급식일' 로 볼 말 늘리기 | `select.js` 의 `NOMEAL_RE` |
 | 위젯 창 크기 | `main.js` 의 `openWidget()` |
 | 색 · 테마 | `css/app.css` 맨 위 `:root` |

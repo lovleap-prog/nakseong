@@ -5,6 +5,7 @@
 import { h, openModal, toast, confirmDialog, promptDialog, labeledChips } from '../lib/dom.js';
 import { newTrip, fmtK, today, addDays, weekStart, STATUS } from '../model.js';
 import { list, put, remove, isAdmin, currentUser, audit } from '../store.js';
+import { planRows, planState, openSubForm } from './subplan.js';
 
 const RANGES = [
   ['upcoming', '앞으로'],
@@ -40,7 +41,15 @@ export function renderTrips(ctx) {
           onClick: () => { st.range = k; refresh(); },
         }, label))),
         pending.length ? h('span', { class: 'clash-count' }, `확인 대기 ${pending.length}건`) : null,
-        needSub.length ? h('span', { class: 'sub-count' }, `보결 필요 ${needSub.length}건`) : null),
+        // 관리자에게 중요한 것은 '보결이 필요한 건수' 가 아니라 '아직 못 정한 건수' 다.
+        needSub.length
+          ? h('span', { class: 'sub-count' }, admin
+            ? (() => {
+              const left = needSub.filter((x) => planState(x) !== 'done').length;
+              return left ? `보결 미배정 ${left}건` : `보결 ${needSub.length}건 모두 배정`;
+            })()
+            : `보결 필요 ${needSub.length}건`)
+          : null),
       h('div', { class: 'datebar-actions' },
         h('button', { class: 'btn btn-primary', onClick: () => openTripForm(null, refresh) }, '+ 출장 신청'))),
 
@@ -48,20 +57,38 @@ export function renderTrips(ctx) {
       ? h('section', { class: 'sec sec-sub' },
         h('div', { class: 'sec-head' },
           h('h3', {}, `\u{1F464} 보결이 필요한 출장 ${needSub.length}건`),
-          h('span', { class: 'muted small' }, '몇 교시에 누가 들어갈지 정해야 합니다')),
+          h('span', { class: 'muted small' },
+            admin ? '[배정] 을 눌러 누가 들어갈지 정하세요' : '관리 선생님이 누가 들어갈지 정합니다')),
         h('div', { class: 'table-wrap' },
           h('table', { class: 'tbl' },
-            h('thead', {}, h('tr', {}, ...['날짜', '신청자', '사유', '보결 내용'].map((x) => h('th', {}, x)))),
-            h('tbody', {}, ...needSub.map((x) => h('tr', {},
+            h('thead', {}, h('tr', {}, ...['날짜', '신청자', '사유', '요청', '배정'].map((x) => h('th', {}, x)))),
+            h('tbody', {}, ...needSub.map((x) => h('tr', { class: planState(x) === 'done' ? '' : 'row-todo' },
               h('td', { class: 'nowrap' }, fmtK(x.date, { year: false })),
               h('td', { class: 'strong' }, x.applicant),
               h('td', {}, x.reason),
-              h('td', { class: 'sub-note' }, x.subNote || h('span', { class: 'warn-text' }, '교시 미기재')))))))) 
+              h('td', { class: 'sub-note' }, x.subNote || h('span', { class: 'warn-text' }, '교시 미기재')),
+              h('td', { class: 'sub-note' }, subCell(x, admin, refresh)))))))) 
       : null,
 
     rows.length
       ? h('div', {}, ...rows.map((x) => tripCard(x, me, admin, refresh)))
       : h('div', { class: 'empty' }, '해당하는 출장이 없습니다.'));
+}
+
+/** 배정 칸 — 정해졌으면 누가 들어가는지, 아니면 [배정] 단추 */
+function subCell(x, admin, refresh) {
+  const rows = planRows(x);
+  const done = planState(x) === 'done';
+  return h('div', { class: 'row gap wrap' },
+    rows.length
+      ? h('span', {}, rows.map((r) => `${[r.period, r.klass].filter(Boolean).join(' ')} \u2192 ${r.teacher || '(미정)'}`).join(' / '))
+      : h('span', { class: 'warn-text' }, '미배정'),
+    admin
+      ? h('button', {
+        class: `btn btn-sm${done ? '' : ' btn-primary'}`,
+        onClick: () => openSubForm(x, refresh),
+      }, rows.length ? '고치기' : '배정')
+      : null);
 }
 
 function tripCard(x, me, admin, refresh) {
@@ -82,7 +109,11 @@ function tripCard(x, me, admin, refresh) {
         x.needsSub ? h('span', { class: 'badge badge-sub' }, '보결 필요') : null),
       labeledChips([['신청', x.applicant], ['계', x.dept], ['장소', x.place]]),
       x.needsSub
-        ? h('p', { class: 'trip-sub' }, '보결: ', x.subNote || h('span', { class: 'warn-text' }, '몇 교시인지 적어주세요'))
+        ? h('p', { class: 'trip-sub' }, '보결: ', x.subNote || h('span', { class: 'warn-text' }, '몇 교시인지 적어주세요'),
+          planRows(x).length
+            ? h('span', { class: 'trip-plan' }, ' \u2192 ',
+              planRows(x).map((r) => `${[r.period, r.klass].filter(Boolean).join(' ')} ${r.teacher || '(미정)'}`).join(' / '))
+            : h('span', { class: 'badge st-rejected' }, '미배정'))
         : null,
       x.status === 'rejected' && x.rejectReason
         ? h('p', { class: 'card-reject' }, `반려 사유: ${x.rejectReason}`) : null),

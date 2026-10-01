@@ -243,7 +243,11 @@ export function newTrip(partial = {}) {
     applicant: '', dept: '',
     reason: '', place: '',
     needsSub: false,     // 보결 필요 여부
-    subNote: '',         // 몇 교시 보결이 필요한지
+    subNote: '',         // 몇 교시 보결이 필요한지 (신청자가 적는 '요청')
+    // 누가 어느 교시에 들어가는지 (관리자가 채우는 '배정').
+    // [{ period: '1-2교시', klass: '5학년', teacher: '김용신', note: '' }]
+    // 파이어스토어는 배열 안의 배열을 받지 않으므로 짝을 객체로 담는다.
+    subPlan: [],
     status: 'pending',   // pending → approved / rejected
     reviewedBy: '', reviewedAt: '', rejectReason: '',
     createdAt: new Date().toISOString(),

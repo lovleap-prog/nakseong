@@ -21,6 +21,7 @@ import { memoPanel, memoComposer } from './memoview.js';
 import { memosOn, memosBetween } from '../memo.js';
 import { academicOn } from './academic.js';
 import { tripsOn, openTripForm } from './trips.js';
+import { subBox, mySubBar, unassignedCount, planState, planRows } from './subplan.js';
 
 // ── 공통 조각 ───────────────────────────────────────────────
 /**
@@ -514,6 +515,9 @@ export function renderDaily(ctx) {
       ],
     }),
 
+    // 내가 보결로 들어가는 날이면 맨 위에 띄운다. 그 날 가장 중요한 알림이다.
+    mySubBar(d),
+
     // 급식이 없는 날은 그 날 화면에서 바로 보여야 한다. 문서를 열어야 아는 것이 아니라.
     isNoMeal(d)
       ? h('div', { class: 'nomeal-bar' },
@@ -537,13 +541,15 @@ export function renderDaily(ctx) {
     // 보결이 있는 날은 그 칸이 주황으로 선다.
     (() => {
       const subs = trips.filter((t) => t.needsSub).length;
+      // 숫자가 주황으로 서는 것은 '아직 들어갈 사람을 못 정한' 건이 있을 때다.
+      const subLeft = isAdmin() ? unassignedCount(d) : 0;
       const posts = postsIn(d, d).length;
       const tile = (n, label, hot) => h('div', { class: `sum-tile${hot ? ' hot' : ''}` },
         h('b', {}, n), h('span', {}, label));
       return h('div', { class: 'sum-strip', role: 'group', 'aria-label': '오늘 요약' },
         tile(approved.length + spans.length, '교육활동'),
         tile(slots.length, '교담'),
-        tile(subs, '보결', subs > 0),
+        tile(subs, '보결', isAdmin() ? subLeft > 0 : subs > 0),
         tile(posts, '공지'));
     })(),
 
@@ -551,6 +557,11 @@ export function renderDaily(ctx) {
       ? section(`확인 대기 ${pending.length}건`, pending.map((a) => activityCard(a, { onChange: rerender, checkDate: d, clash: cl(a) })),
         isAdmin() ? h('button', { class: 'btn btn-sm', onClick: () => ctx.go('approvals') }, '승인함에서 처리') : null)
       : null,
+
+    // 보결이 필요한 날에만 뜨는 체크리스트. 관리자만 본다.
+    // '확인 대기' 바로 아래 둔다. 그 날 관리 선생님이 해야 할 일이고, 아침에 화면을
+    // 내리기 전에 눈에 들어와야 그 날 수업이 빈 채로 시작되지 않는다.
+    subBox(d, rerender),
 
     // 공지는 일일과 주간이 같은 것을 본다. 기간이 오늘에 걸치면 여기 뜬다.
     boardBox(d, d, { title: '공지사항', refresh: rerender }),
@@ -625,7 +636,15 @@ export function renderDaily(ctx) {
           // 보결을 들어갈 선생님이 알아야 할 건 '몇 교시·몇 반' 이다. 마우스를 올려야
           // 보이던 것을 칩에 그대로 붙인다(휴대전화에는 마우스가 없다).
           t.needsSub ? h('span', { class: 'badge badge-sub' }, '보결') : null,
-          t.needsSub ? h('span', { class: 'trip-sub-note' }, t.subNote || '교시 미기재') : null)))
+          // 배정이 끝났으면 요청 글 대신 '누가 들어가는지' 를 적는다. 그것이 알고 싶은 것이다.
+          t.needsSub
+            ? h('span', { class: 'trip-sub-note' },
+              planState(t) === 'done'
+                ? planRows(t).map((r) => `${[r.period, r.klass].filter(Boolean).join(' ')} ${r.teacher}`).join(' / ')
+                : (t.subNote || '교시 미기재'))
+            : null,
+          t.needsSub && planState(t) !== 'done'
+            ? h('span', { class: 'badge st-rejected' }, '미배정') : null)))
         : h('div', { class: 'empty' }, '이 날짜에 등록된 출장이 없습니다.')),
 
     h('section', { class: 'sec sec-memo' },

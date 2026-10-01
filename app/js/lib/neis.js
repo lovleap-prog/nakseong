@@ -142,9 +142,18 @@ export function dailyPlanText(p) {
   }
 
   // 보결이 필요한 출장은 안내문에 꼭 들어간다. 그 날 수업을 누가 들어가는지가 걸려서다.
+  // 배정을 해 두었으면 '1-2교시: 5학년(김용신)' 처럼 들어갈 분까지 적는다. 요청만
+  // 적혀 있으면 그 글을 그대로 내보낸다(아직 못 정한 것이라 고쳐 쓰실 수 있게).
   for (const t of trips.filter((x) => x.needsSub)) {
     L.push(`${++n}. ${t.subTitle || `${t.applicant || ''} 보결`}`.replace(/\s+/g, ' ').trim());
-    if (t.subNote) L.push(t.subNote);
+    const rows = (Array.isArray(t.subPlan) ? t.subPlan : [])
+      .filter((r) => r && (r.period || r.klass || r.teacher));
+    if (rows.length) {
+      L.push(rows.map((r) => {
+        const head = [r.period, r.klass].filter(Boolean).join(': ');
+        return r.teacher ? `${head}(${r.teacher})` : head;
+      }).join('/'));
+    } else if (t.subNote) L.push(t.subNote);
   }
 
   const dayBell = bellById(dayBellId(date));

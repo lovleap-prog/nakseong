@@ -357,6 +357,9 @@ body.widget { background: var(--panel); }
 .w-title { font-weight: 600; }
 .w-place { font-size: 11.5px; color: var(--muted); }
 .widget-nomeal { background: #fff4e5; border: 1px solid #fcd9a8; color: #8a4b08; border-radius: 8px; padding: 6px 9px; font-size: 12.5px; font-weight: 600; margin-bottom: 9px; }
+.widget-mysub { background: #fff1e6; border: 1px solid #f6c89a; border-radius: 8px; padding: 7px 9px; margin-bottom: 9px; }
+.widget-mysub h4 { font-size: 12.5px; color: #8a4b08; margin: 0 0 3px; }
+.widget-mysub ul { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
 .widget-notice { background: #fffbea; border: 1px solid #f2e2ae; border-radius: 8px; padding: 7px 9px; margin-bottom: 10px; }
 .widget-notice h4 { font-size: 12.5px; color: #8a6d1d; margin: 0 0 4px; display: flex; align-items: center; gap: 4px; }
 .widget-notice ul { list-style: none; margin: 0; padding: 0; }
@@ -726,6 +729,50 @@ body.dragging-now .band-grid { pointer-events: none; }
   border-radius: 999px; padding: 2px 10px;
 }
 .sub-wrap { background: var(--warn-bg); border-radius: 8px; padding: 10px 12px; }
+
+/* ── 보결 배정 체크리스트 ──────────────────
+   보결이 필요한 날에만 뜬다. 할 일이 없는 날까지 자리를 차지하면 눈이 지나친다. */
+.sec-sub.is-left { background: var(--warn-bg); }
+.sub-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sub-item {
+  display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: start;
+  padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+}
+.sub-item.is-none, .sub-item.is-partial { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.sub-item.is-done { opacity: .9; }
+.sub-mark { font-size: 16px; line-height: 1.3; color: var(--warn); }
+.sub-item.is-done .sub-mark { color: var(--ok); }
+.sub-body { min-width: 0; }
+.sub-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sub-ask { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); white-space: pre-wrap; }
+.sub-rows { list-style: none; margin: 5px 0 0; padding: 0; display: grid; gap: 2px; }
+.sub-rows li { font-size: 13px; font-weight: 600; }
+.sub-rows li.is-blank { color: var(--warn); }
+.trip-plan { font-weight: 700; color: var(--ok); }
+.row-todo td { background: var(--warn-bg); }
+
+/* 배정 창 — 교시 · 학급 · 들어갈 분 · 비고 */
+.sub-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 32px; gap: 6px; align-items: center; margin: 8px 0; }
+.sub-h { font-size: 12px; color: var(--muted); font-weight: 700; }
+.sub-form .input { min-width: 0; }
+
+/* 내가 들어가는 보결 — 그 날 가장 먼저 봐야 할 알림이라 맨 위에 둔다 */
+.mysub-bar {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: color-mix(in srgb, var(--warn) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
+  border-left: 4px solid var(--warn);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+}
+.mysub-ico { font-size: 18px; line-height: 1.2; }
+.mysub-bar ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.mysub-bar li { font-size: 13.5px; }
+@media (max-width: 640px) {
+  .sub-grid { grid-template-columns: 1fr 1fr; }
+  .sub-grid .sub-h { display: none; }
+  .sub-item { grid-template-columns: 20px 1fr; }
+  .sub-item > .btn { grid-column: 2; justify-self: start; }
+}
 .sub-toggle { padding: 4px 0; }
 .trip-strip { display: flex; flex-wrap: wrap; gap: 6px; }
 .trip-pill {
