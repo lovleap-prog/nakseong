@@ -122,7 +122,7 @@ function itemText(a, date) {
  * 적어 두지 않으면 기간 일정도 위 번호 목록에 들어간다.
  */
 export function dailyPlanText(p) {
-  const { date, activities = [], trips = [] } = p;
+  const { date, activities = [] } = p;
   const tail = String(p.tail == null ? DEFAULT_DAILY_TAIL : p.tail);
   const d = parseYmd(date);
   const L = [];
@@ -141,20 +141,12 @@ export function dailyPlanText(p) {
     for (const line of rest) L.push(line);
   }
 
-  // 보결이 필요한 출장은 안내문에 꼭 들어간다. 그 날 수업을 누가 들어가는지가 걸려서다.
-  // 배정을 해 두었으면 '1-2교시: 5학년(김용신)' 처럼 들어갈 분까지 적는다. 요청만
-  // 적혀 있으면 그 글을 그대로 내보낸다(아직 못 정한 것이라 고쳐 쓰실 수 있게).
-  for (const t of trips.filter((x) => x.needsSub)) {
-    L.push(`${++n}. ${t.subTitle || `${t.applicant || ''} 보결`}`.replace(/\s+/g, ' ').trim());
-    const rows = (Array.isArray(t.subPlan) ? t.subPlan : [])
-      .filter((r) => r && (r.period || r.klass || r.teacher));
-    if (rows.length) {
-      L.push(rows.map((r) => {
-        const head = [r.period, r.klass].filter(Boolean).join(': ');
-        return r.teacher ? `${head}(${r.teacher})` : head;
-      }).join('/'));
-    } else if (t.subNote) L.push(t.subNote);
-  }
+  // 출장·보결은 여기에 넣지 않는다.
+  //
+  // 안내문은 결재로 올라가고 메신저로도 돌아 여러 곳에 남는다. '누가 어디로 출장을
+  // 가고, 누가 그 자리에 들어간다' 는 것은 그 날 수업을 맡은 분들 사이에서만 오가면
+  // 되는 일이라, 남는 문서에 이름을 적어 두지 않는다.
+  // 보결 배정은 [일일] 화면의 체크리스트와 [보결 안내 복사] 로 알린다.
 
   const dayBell = bellById(dayBellId(date));
   if (dayBell && dayBell.id !== defaultBell().id) L.push(`※ ${dayBell.name} 운영`);

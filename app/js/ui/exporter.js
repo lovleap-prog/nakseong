@@ -1,7 +1,6 @@
 // 결재 문구 / 메신저 안내 / 한글 파일 내보내기 모달
 import { h, openModal, toast, copyText, download } from '../lib/dom.js';
 import { dailyPlanText, periodText } from '../lib/neis.js';
-import { tripsOn } from '../views/trips.js';
 import { dailyTail } from '../links.js';
 import { buildHwpx, buildHwpxDoc, buildHtmlForHwp, renderBlocksHtml } from '../lib/hwpx-write.js';
 import { weeklyForm, monthlyForm } from '../lib/formdoc.js';
@@ -22,8 +21,7 @@ export function openDayExport(date) {
   // 그대로 내고, 되풀이되는 * · - 문단은 [설정] 의 고정 문구에서 가져온다.
   const render = () => {
     out.value = dailyPlanText({
-      date, activities: bundle.activities, trips: tripsOn(date),
-      tail: dailyTail(), school,
+      date, activities: bundle.activities, tail: dailyTail(), school,
     });
   };
 
@@ -31,7 +29,10 @@ export function openDayExport(date) {
     out,
     h('p', { class: 'muted small' },
       '문구는 바로 고칠 수 있습니다. 고친 내용 그대로 복사·내려받기 됩니다. ',
-      '날마다 되풀이되는 아래 문단은 [설정] → 일일 안내문 고정 문구 에서 고칩니다.'));
+      '날마다 되풀이되는 아래 문단은 [설정] → 일일 안내문 고정 문구 에서 고칩니다.'),
+    h('p', { class: 'muted small' },
+      '출장·보결은 여기에 담지 않습니다. 남는 문서라 이름을 적지 않습니다. ',
+      '보결은 [일일] 화면의 보결 배정 칸에서 [보결 안내 복사] 로 알리세요.'));
 
   render();
 

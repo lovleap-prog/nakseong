@@ -41,7 +41,7 @@ const DEFAULTS = {
 // 지금 브라우저가 돌리고 있는 앱의 판. app/sw.js 의 VERSION 과 같이 올린다.
 // [설정] 에서 서버에 올라간 판과 견줘 보여 준다. '내 화면만 안 바뀐다' 를
 // 눈으로 확인할 수 있어야 하기 때문이다.
-export const APP_VERSION = 'v45';
+export const APP_VERSION = 'v46';
 
 const LS_KEY = 'sam.config';
 
