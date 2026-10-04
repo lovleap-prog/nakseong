@@ -923,8 +923,14 @@ body.dragging-now .band-grid { pointer-events: none; }
 .formdoc th, .formdoc td {
   border: 1px solid #000; padding: 3px 4px; font-size: 11px;
   text-align: center; vertical-align: middle;
-  white-space: pre-wrap; word-break: break-word;
+  white-space: pre-wrap;
+  /* 한글은 낱자 사이 아무 데서나 접지 않는다. '정하늘아' 가 '정하늘 / 아' 로 끊기던 자리다.
+     낱말 하나가 칸보다 길 때만 어쩔 수 없이 쪼갠다. */
+  word-break: keep-all; overflow-wrap: break-word;
 }
+/* 한두 글자가 넘치는 칸은 자간을 조금 줄여 한 줄에 앉힌다 (한글 문서의 자간과 같은 값). */
+.formdoc td.t1 { letter-spacing: -0.04em; }
+.formdoc td.t2 { letter-spacing: -0.08em; }
 .formdoc td.l { text-align: left; }
 /* 같은 날 안에서 활동이 갈리는 자리는 점선, 한 줄 걸러 옅은 바탕.
    주말·공휴일 칸도 같은 바탕을 쓴다. 한글 서식과 맞춰 둔 것이다. */
@@ -956,8 +962,11 @@ body.dragging-now .band-grid { pointer-events: none; }
   }
   body.printing #print-area th, body.printing #print-area td {
     border: 1px solid #000; padding: 2.5pt 3pt; font-size: 9pt;
-    text-align: center; vertical-align: middle; white-space: pre-wrap; word-break: break-word;
+    text-align: center; vertical-align: middle; white-space: pre-wrap;
+    word-break: keep-all; overflow-wrap: break-word;
   }
+  body.printing #print-area td.t1 { letter-spacing: -0.04em; }
+  body.printing #print-area td.t2 { letter-spacing: -0.08em; }
   body.printing #print-area td.l { text-align: left; }
   body.printing #print-area td.dt { border-top-style: dashed; }
   body.printing #print-area td.db { border-bottom-style: dashed; }

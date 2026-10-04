@@ -3,6 +3,7 @@
 // 표는 실제 학교 문서의 hp:tbl 구조를 그대로 본떴다. 칸 병합(rowSpan·colSpan)까지 낸다.
 // 그래도 안 열리는 한글 버전이 있을 수 있어 buildHtmlForHwp() 폴백을 함께 둔다.
 import { zip } from './zip.js';
+import { TIGHT_PCT } from './fitline.js';
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -22,20 +23,31 @@ function fontfaces(hangul, latin) {
   }).join('') + `</hh:fontfaces>`;
 }
 
-/** 글자 모양: 0=본문, 1=제목(굵게·크게), 2=작은 글씨 */
+/**
+ * 글자 모양: 0=본문, 1=제목(굵게·크게), 2=작은 글씨, 3=머리글(굵게),
+ *            4·5=본문을 자간만 좁힌 것 (한두 글자가 넘치는 칸을 한 줄에 앉힌다)
+ */
 function charProperties(baseSize) {
-  const pr = (id, height, bold) =>
+  const pr = (id, height, bold, spacing = 0) =>
     `<hh:charPr id="${id}" height="${height}" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1">` +
     `<hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>` +
     `<hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>` +
-    `<hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>` +
+    `<hh:spacing hangul="${spacing}" latin="${spacing}" hanja="${spacing}" japanese="${spacing}" other="${spacing}" symbol="${spacing}" user="${spacing}"/>` +
     `<hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>` +
     `<hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>` +
     (bold ? '<hh:bold/>' : '') +
     `</hh:charPr>`;
-  return `<hh:charProperties itemCnt="4">${pr(0, baseSize, false)}${pr(1, Math.round(baseSize * 1.35), true)}` +
-    `${pr(2, Math.round(baseSize * 0.85), false)}${pr(3, baseSize, true)}</hh:charProperties>`;
+  const tight = TIGHT_PCT.slice(1)
+    .map((pct, i) => pr(TIGHT_BASE + i, baseSize, false, pct)).join('');
+  return `<hh:charProperties itemCnt="${4 + TIGHT_PCT.length - 1}">` +
+    `${pr(0, baseSize, false)}${pr(1, Math.round(baseSize * 1.35), true)}` +
+    `${pr(2, Math.round(baseSize * 0.85), false)}${pr(3, baseSize, true)}${tight}</hh:charProperties>`;
 }
+
+/** 자간을 좁힌 글자 모양의 첫 번호. 0~3 은 이미 쓰고 있다. */
+const TIGHT_BASE = 4;
+/** 이 칸이 쓸 글자 모양 번호 */
+const charPrOf = (x) => (x.tight > 0 && x.tight < TIGHT_PCT.length ? TIGHT_BASE + x.tight - 1 : 0);
 
 /** 문단 모양: 0=왼쪽, 1=가운데 */
 function paraProperties() {
@@ -197,7 +209,7 @@ function tblXml(t, opt, id) {
   const trs = grid.map((row, r) => '<hp:tr>' + row.map((x) => {
     const paras = x.t.split('\n');
     const paraPr = x.align === 'left' ? 0 : 1;
-    const charPr = isHead(r) ? 3 : 0;
+    const charPr = isHead(r) ? 3 : charPrOf(x);
     const inner = paras.map((line) =>
       `<hp:p id="2147483648" paraPrIDRef="${paraPr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
       `<hp:run charPrIDRef="${charPr}"><hp:t>${esc(line)}</hp:t></hp:run>${LINESEG}</hp:p>`).join('');
@@ -330,10 +342,11 @@ export function cellOf(c) {
       t: String(c.t == null ? '' : c.t),
       rowSpan: c.rowSpan || 1, colSpan: c.colSpan || 1, align: c.align || 'center',
       dashTop: !!c.dashTop, dashBottom: !!c.dashBottom, shade: !!c.shade,
+      tight: c.tight || 0,
     };
   }
   return { t: String(c == null ? '' : c), rowSpan: 1, colSpan: 1, align: 'center',
-    dashTop: false, dashBottom: false, shade: false };
+    dashTop: false, dashBottom: false, shade: false, tight: 0 };
 }
 
 /**
@@ -364,7 +377,10 @@ export function buildHtmlForHwp({
              border:1px solid #000; padding:8pt 4pt; margin:0 0 8pt; line-height:1.4; }
   table { border-collapse: collapse; width: 100%; margin-bottom: 10pt; table-layout: fixed; }
   th, td { border: 1px solid #000; padding: 3pt 4pt; font-size: ${(fontSize * 0.95).toFixed(0)}pt;
-           text-align: center; vertical-align: middle; white-space: pre-wrap; word-break: break-word; }
+           text-align: center; vertical-align: middle; white-space: pre-wrap;
+           word-break: keep-all; overflow-wrap: break-word; }
+  td.t1 { letter-spacing: -0.04em; }
+  td.t2 { letter-spacing: -0.08em; }
   td.l { text-align: left; }
   td.dt { border-top-style: dashed; }
   td.db { border-bottom-style: dashed; }
@@ -394,7 +410,8 @@ function tableHtml(t) {
     const x = cellOf(c);
     const sp = (x.rowSpan > 1 ? ` rowspan="${x.rowSpan}"` : '') + (x.colSpan > 1 ? ` colspan="${x.colSpan}"` : '');
     const names = [x.align === 'left' ? 'l' : '', x.dashTop ? 'dt' : '',
-      x.dashBottom ? 'db' : '', x.shade ? 'sh' : ''].filter(Boolean);
+      x.dashBottom ? 'db' : '', x.shade ? 'sh' : '',
+      x.tight ? `t${x.tight}` : ''].filter(Boolean);
     const cls = names.length ? ` class="${names.join(' ')}"` : '';
     return `<${tag}${sp}${cls}>${esc(x.t).replace(/\n/g, '<br>') || '&nbsp;'}</${tag}>`;
   }).join('');

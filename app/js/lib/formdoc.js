@@ -11,6 +11,7 @@ import { describeTime } from '../conflict.js';
 import { holidayOn } from './holidays.js';
 import { activitiesOn, recurringOn, isNoMeal, cleanDetail } from '../select.js';
 import { loadConfig } from '../config.js';
+import { packItems, fitText, capEm } from './fitline.js';
 
 /**
  * 그 주가 몇 월 몇째 주인가.
@@ -127,6 +128,13 @@ function weekRowsOf(date, from) {
 
 // 시간 칸은 '1~4교시' 가 한 줄에, 장소 칸은 '득량남초병설유치원' 이 두 줄 안에 들어가야 한다.
 // 사진에서 '1-5교/시' 로 접히고 기관 이름이 잘려 나갔다. 내용 칸에서 그만큼 덜어 온다.
+// 글이 들어가는 쪽 너비 (HWPUNIT). hwpx-write.js 의 PAGE_W 에서 좌우 여백을 뺀 값과 같다.
+// 여기서 칸마다 몇 글자가 들어가는지 알아야 줄을 끊고 자간을 좁힐 수 있다.
+const PAGE_W = 59528;
+const USABLE_WEEK = PAGE_W - 2834 * 2;     // 주간: 좌우 10mm
+const USABLE_MONTH = PAGE_W - 4251 * 2;    // 월중: 좌우 15mm
+const fontPt = () => loadConfig().hwp.fontSize || 11;
+
 const WEEK_COLS = [
   { label: '날짜\n(요일)', w: 8.2 },
   { label: '계', w: 8.6 },
@@ -157,14 +165,28 @@ function weekMainTable(from, to) {
       const mark = (c) => (typeof c === 'object'
         ? { ...c, dashTop, dashBottom, shade }
         : { t: c, dashTop, dashBottom, shade });
+      // 좁은 칸에 한두 글자가 넘치면 자간을 조금 줄여 한 줄에 앉힌다.
+      // '정하늘아, 오진영' 이 이름 한가운데서 끊기던 자리다.
+      const fit = (text, col) => {
+        const f = fitText(text, capEm(USABLE_WEEK, WEEK_COLS[col].w, fontPt()));
+        return { t: f.text, tight: f.tight };
+      };
+      // 이름이 둘이면 '정하늘아, 오진영' 이 '정하늘 / 아, 오진영' 으로 끊겼다.
+      // 쉼표에서 끊어 한 줄에 한 사람씩 세운다. 쉼표도 함께 떼어 낸다.
+      const fitNames = (text, col) => {
+        const cap = capEm(USABLE_WEEK, WEEK_COLS[col].w, fontPt());
+        const names = String(text || '').split(/\s*,\s*/).filter(Boolean);
+        const f = names.length > 1 ? packItems(names, cap, ', ') : fitText(text, cap);
+        return { t: f.text.replace(/,$/gm, ''), tight: f.tight };
+      };
       rows.push([
         // 날짜 칸은 그 날 전체를 세로로 덮으니 줄 걸러 깔지 않는다. 공휴일일 때만 깐다.
         ...(i === 0 ? [{ t: label, rowSpan: items.length, shade: off }] : []),
-        mark(it.dept || ''),
-        mark(it.owner || ''),
-        mark({ t: it.work, align: 'left' }),
-        mark(it.time || ''),
-        mark(it.place || ''),
+        mark(fit(it.dept || '', 1)),
+        mark(fitNames(it.owner || '', 2)),
+        mark({ ...fit(it.work, 3), align: 'left' }),
+        mark(fit(it.time || '', 4)),
+        mark(fit(it.place || '', 5)),
       ]);
     });
   }
@@ -296,12 +318,15 @@ export function monthlyForm(first) {
     // 주말(토·일)과 법정공휴일은 옅게 깔아 수업일과 갈라 보이게 한다.
     const off = holidayOn(d);
     const shade = dt.getDay() === 0 || dt.getDay() === 6 || !!off;
+    // 공휴일 이름은 학사일정에 없더라도 앞세워 적는다.
+    const all = [off && !acts.some((x) => x.startsWith(off)) ? off : '', ...acts].filter(Boolean);
+    // 항목을 반으로 자르지 않는다. 자간을 좁혀도 안 들어가면 항목이 시작되는 자리에서
+    // 줄을 바꾼다. 여태 '영어원어민 순회(6-5-' 에서 끊기던 것이 이 때문이었다.
+    const packed = packItems(all, capEm(USABLE_MONTH, MONTH_COLS[2], fontPt()));
     rows.push([
       { t: String(dt.getDate()), shade },
       { t: WEEKDAY[dt.getDay()], shade },
-      // 공휴일 이름은 학사일정에 없더라도 앞세워 적는다.
-      { t: [off && !acts.some((x) => x.startsWith(off)) ? off : '', acts.join(', ')]
-        .filter(Boolean).join(', '), align: 'left', shade },
+      { t: packed.text, tight: packed.tight, align: 'left', shade },
       { t: noMeal.has(d) ? '비급식일' : '', shade },
     ]);
   }

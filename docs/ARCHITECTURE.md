@@ -30,6 +30,7 @@ app/
       hwpx-write.js       결재용 hwpx 생성 · 한글용 HTML 생성
       xlsx-read.js        xlsx 첫 시트 → 2차원 배열
       textparse.js        자유 형식 글 · 표 → 일정 행
+      fitline.js          서식 칸에 맞게 줄 끊기 · 자간 좁히기
       neis.js             일일 안내문 · 주간/월간 줄글 요약
     ui/
       activityForm.js     일정 입력/수정 모달
@@ -85,6 +86,7 @@ Firestore의 `onSnapshot` 도 같은 `emit` 을 부르기 때문에,
 | 음영 강조 색 늘리기 | `model.js` 의 `HILITE` + `css/app.css` 의 `.hl-*` |
 | 보결 배정 · 알림 | `views/subplan.js` (체크리스트 · 배정 창 · 메신저 글) |
 | '비급식일' 로 볼 말 늘리기 | `select.js` 의 `NOMEAL_RE` |
+| 자간을 좁히는 단계 | `lib/fitline.js` 의 `TIGHT_PCT` (한글·CSS 가 같이 쓴다) |
 | 위젯 창 크기 | `main.js` 의 `openWidget()` |
 | 열 때 어느 날짜로 뜰지 | `main.js` 의 `readHash()` · `askedDate` |
 | 색 · 테마 | `css/app.css` 맨 위 `:root` |
