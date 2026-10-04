@@ -86,6 +86,7 @@ Firestore의 `onSnapshot` 도 같은 `emit` 을 부르기 때문에,
 | 보결 배정 · 알림 | `views/subplan.js` (체크리스트 · 배정 창 · 메신저 글) |
 | '비급식일' 로 볼 말 늘리기 | `select.js` 의 `NOMEAL_RE` |
 | 위젯 창 크기 | `main.js` 의 `openWidget()` |
+| 열 때 어느 날짜로 뜰지 | `main.js` 의 `readHash()` · `askedDate` |
 | 색 · 테마 | `css/app.css` 맨 위 `:root` |
 
 ## 알아둘 제약

@@ -6,7 +6,7 @@ import {
   initStore, on, loadSavedUser, currentUser, setUser, isAdmin, backendKind,
   signIn, signOut, needsSignIn, isApproved, pruneAudit, setInitError, initError,
 } from './store.js';
-import { today, fmtK, addDays } from './model.js';
+import { today, fmtK, addDays, ymd, parseYmd } from './model.js';
 import { renderDaily, renderWeekly, renderMonthly } from './views/schedule.js';
 import { renderRecurring } from './views/recurring.js';
 import { renderTimetable } from './views/timetable.js';
@@ -49,9 +49,21 @@ const visibleTabs = () => TABS.filter(([k]) => isAdmin() || TEACHER_TABS.has(k))
 // 교사에게 '승인함' 은 맞지 않는 이름이다. 교사는 승인하지 않고 제출한다.
 const tabLabel = (key, label) => (key === 'approvals' && !isAdmin() ? '내 제출' : label);
 
+/**
+ * 주소에 ?date=2026-11-03 이 실려 있으면 그 날로 연다.
+ * 남에게 '이 날 좀 보세요' 하고 보낼 때 쓰는 길이다. 아래 '늘 오늘부터' 규칙보다 앞선다.
+ */
+const askedDate = (() => {
+  try {
+    const d = new URLSearchParams(location.search).get('date') || '';
+    // 모양만 맞는 '2026-13-99' 같은 것은 버린다. 되돌려 적어 보고 같을 때만 날짜로 본다.
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) && ymd(parseYmd(d)) === d ? d : '';
+  } catch { return ''; }
+})();
+
 const state = {
   tab: 'daily',
-  date: today(),
+  date: askedDate || today(),
   state: {},   // 각 화면이 쓰는 임시 상태
   memoOpen: (() => { try { return !!localStorage.getItem('sam.memoOpen'); } catch { return false; } })(),
   userMenu: false,   // 머리말 이름 단추를 눌러 연 상태
@@ -157,11 +169,42 @@ async function boot() {
   }
 }
 
+/**
+ * 앱을 새로 열 때인가 (다시 불러오기·뒤로가기가 아니라).
+ * 알 수 없는 브라우저에서는 '새로 열었다' 고 본다. 오늘로 여는 쪽이 안전하다.
+ */
+function openedFresh() {
+  try {
+    const nav = performance.getEntriesByType('navigation')[0];
+    return !nav || nav.type === 'navigate';
+  } catch { return true; }
+}
+
+let firstRead = true;
+
+/**
+ * 주소의 #/daily/2026-09-21 을 읽는다.
+ *
+ * 화면을 옮길 때마다 날짜를 주소에 적어 둔다. 그런데 바탕화면·홈 화면 아이콘은
+ * **마지막에 보던 주소를 그대로 다시 연다.** 그래서 9월에 보던 날짜가 10월에도
+ * 그대로 떴다. 아침에 열면 오늘이 떠야 한다.
+ *
+ * 그래서 **앱을 새로 열 때는 주소에 적힌 날짜를 버리고 오늘로 연다.** 탭은 그대로 둔다
+ * (월간을 보던 분은 월간으로 여는 게 맞다). 다시 불러오기(F5)와 뒤로·앞으로는 건드리지
+ * 않는다. 보던 날을 잃으면 그게 더 성가시다.
+ * 날짜를 실어 보내려면 ?date=2026-11-03 을 쓴다. 그것은 늘 따른다.
+ */
 function readHash() {
+  const first = firstRead;
+  firstRead = false;
   const m = location.hash.match(/^#\/(\w+)(?:\/(\d{4}-\d{2}-\d{2}))?/);
   if (!m) return;
   if (TABS.some(([k]) => k === m[1])) state.tab = m[1];
-  if (m[2]) state.date = m[2];
+  if (!m[2]) return;
+  // 처음 읽을 때는 주소에 적힌 날짜를 쓰지 않는다 — ?date= 가 있으면 그것이 앞서고,
+  // 없으면 오늘이다. 다시 불러오기·뒤로가기일 때만 보던 날을 되살린다.
+  if (first && (askedDate || openedFresh())) return;
+  state.date = m[2];
 }
 function syncHash() {
   const next = `#/${state.tab}/${state.date}`;
@@ -326,7 +369,8 @@ function memoDock() {
 }
 
 function openWidget() {
-  const url = `${location.pathname}?mode=widget#/daily/${state.date}`;
+  // 보던 날짜를 ?date= 로 싣는다. 해시에 적힌 날짜는 '새로 연 창' 에서 버려지기 때문이다.
+  const url = `${location.pathname}?mode=widget&date=${state.date}#/daily/${state.date}`;
   const w = window.open(url, 'sam-widget', 'width=430,height=760,menubar=no,toolbar=no,location=no');
   if (!w) toast('팝업이 차단됐습니다. 주소창의 차단 해제를 눌러주세요.', 'warn');
 }
@@ -390,7 +434,7 @@ function renderWidget() {
       h('button', { class: 'btn btn-sm', onClick: () => openDayExport(state.date) }, '일일 안내문'),
       h('button', {
         class: 'btn btn-sm',
-        onClick: () => window.open(`${location.pathname}#/daily/${state.date}`, 'sam-main'),
+        onClick: () => window.open(`${location.pathname}?date=${state.date}#/daily/${state.date}`, 'sam-main'),
       }, '전체 열기')));
 }
 
