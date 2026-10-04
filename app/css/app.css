@@ -740,6 +740,21 @@ body.dragging-now .band-grid { pointer-events: none; }
 .sub-ahead b { color: var(--warn); }
 .sub-ahead .btn { margin-left: auto; }
 
+/* 교과교담 표 오른쪽의 시간표 메모. 그 자리가 늘 비어 있었다. */
+.tt-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 270px); gap: 12px; align-items: start; }
+.notice-pane {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 11px; min-width: 0;
+}
+.notice-pane .sec-head { margin-bottom: 4px; }
+.notice-pane h4 { font-size: 12.5px; display: flex; align-items: center; gap: 3px; }
+.notice-pane .notice-text { font-size: 12.5px; white-space: pre-wrap; margin: 0; word-break: keep-all; }
+.notice-pane .empty { font-size: 12px; padding: 6px 0; }
+.notice-pane.kind-tt { border-left: 3px solid var(--brand); }
+@media (max-width: 900px) {
+  .tt-side { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ── 보결 배정 체크리스트 ──────────────────
    보결이 필요한 날에만 뜬다. 할 일이 없는 날까지 자리를 차지하면 눈이 지나친다. */
 .sec-sub.is-left { background: var(--warn-bg); }

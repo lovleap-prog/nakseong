@@ -615,7 +615,15 @@ export function renderDaily(ctx) {
 
     slots.length
       ? foldSection('daily-tt', `교과교담·특별실 ${slots.length}칸`,
-        timetableGrid(slots, clash),
+        // 표 오른쪽이 늘 비어 있었다. 그 자리에 그 주 시간표 메모를 둔다.
+        // [시간표] 탭에 적은 것과 같은 글이다(같은 주면 같은 메모).
+        h('div', { class: 'tt-side' },
+          timetableGrid(slots, clash),
+          noticeBox('tt', weekStart(d), {
+            title: '시간표 운영 메모', compact: true,
+            placeholder: '이 주에 시간표가 왜 바뀌었는지 적어두세요',
+            onChange: rerender,
+          })),
         h('button', { class: 'btn btn-sm', onClick: () => ctx.go('timetable') }, isAdmin() ? '시간표 관리' : '주간 시간표'))
       : null,
     section('방과후학교', [afterSchoolTableNode(after)],

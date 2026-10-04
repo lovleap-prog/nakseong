@@ -8,6 +8,7 @@ import { parseTimetableGrid, parseTimetableLines, parsePastedGrid } from '../lib
 import { readHwpx } from '../lib/hwpx-read.js';
 import { readXlsx } from '../lib/xlsx-read.js';
 import { WEEKDAY, newSlot, weekStart, addDays, fmtK, range, today, parseYmd } from '../model.js';
+import { noticeBox } from './notice.js';
 import { holidayOn } from '../lib/holidays.js';
 import { list, put, putMany, remove, isAdmin, audit } from '../store.js';
 import { periodTable, clashReasons } from '../conflict.js';
@@ -188,6 +189,14 @@ export function renderTimetable(ctx) {
       admin
         ? '칸을 눌러 과목·특별실을 넣으세요. 넣은 칸은 끌어서 다른 요일·교시로 옮길 수 있습니다. 교육활동·반복일정과 시간이 겹치면 빨갛게 표시됩니다.'
         : '시간표는 관리자만 고칠 수 있습니다. 겹치는 칸이 보이면 관리자에게 알려주세요.'),
+
+    // 이 주에 시간표가 왜 바뀌었는지. 표만 보아서는 알 수 없는 것이라 표 위에 둔다.
+    // 일일 화면의 교과교담 표 옆에도 같은 글이 뜬다(같은 주면 같은 메모다).
+    noticeBox('tt', wk, {
+      title: '시간표 운영 메모',
+      placeholder: '예) 10.8(목) 공동교육과정으로 5학년 과학 1-2교시 → 다음 주로 미룸\n수요일 1교시 꿈자람반은 담당 출장으로 쉼',
+      onChange: refresh,
+    }),
 
     admin ? h('div', { class: 'tt-work' }, grid, palette(wk, refresh)) : grid,
 
