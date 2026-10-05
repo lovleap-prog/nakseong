@@ -741,14 +741,16 @@ body.dragging-now .band-grid { pointer-events: none; }
 .sub-ahead .btn { margin-left: auto; }
 
 /* 교과교담 표 오른쪽의 시간표 메모. 그 자리가 늘 비어 있었다. */
-.tt-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 270px); gap: 12px; align-items: start; }
+/* 교과교담 표는 두세 칸뿐이라 제 몫만 차지하면 된다. 남는 폭은 모두 메모가 갖는다.
+   메모를 270px 로 묶어 두었더니 한 줄이면 될 글이 넉 줄로 접혀 칸만 길어졌다. */
+.tt-side { display: grid; grid-template-columns: fit-content(58%) minmax(300px, 1fr); gap: 14px; align-items: start; }
 .notice-pane {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
   padding: 9px 11px; min-width: 0;
 }
 .notice-pane .sec-head { margin-bottom: 4px; }
 .notice-pane h4 { font-size: 12.5px; display: flex; align-items: center; gap: 3px; }
-.notice-pane .notice-text { font-size: 12.5px; white-space: pre-wrap; margin: 0; word-break: keep-all; }
+.notice-pane .notice-text { font-size: 13px; line-height: 1.5; white-space: pre-wrap; margin: 0; word-break: keep-all; }
 .notice-pane .empty { font-size: 12px; padding: 6px 0; }
 .notice-pane.kind-tt { border-left: 3px solid var(--brand); }
 @media (max-width: 900px) {
