@@ -741,9 +741,13 @@ body.dragging-now .band-grid { pointer-events: none; }
 .sub-ahead .btn { margin-left: auto; }
 
 /* 교과교담 표 오른쪽의 시간표 메모. 그 자리가 늘 비어 있었다. */
-/* 교과교담 표는 두세 칸뿐이라 제 몫만 차지하면 된다. 남는 폭은 모두 메모가 갖는다.
-   메모를 270px 로 묶어 두었더니 한 줄이면 될 글이 넉 줄로 접혀 칸만 길어졌다. */
-.tt-side { display: grid; grid-template-columns: fit-content(58%) minmax(300px, 1fr); gap: 14px; align-items: start; }
+/* 교과교담 표는 제 몫만 차지하고, 메모는 그 옆에 **고정 너비**로 선다.
+   화면을 넓히면 메모까지 같이 늘어나던 것을 멈춘다 — 적는 글이 길어지는 칸이 아니다.
+   stretch 로 두어 메모 칸이 시간표(4교시까지) 높이에 맞춰 선다. */
+.tt-side {
+  display: grid; grid-template-columns: fit-content(50%) minmax(0, 460px);
+  gap: 14px; align-items: stretch; justify-content: start;
+}
 .notice-pane {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
   padding: 9px 11px; min-width: 0;
@@ -1024,16 +1028,22 @@ body.dragging-now .band-grid { pointer-events: none; }
 /* 이름 · 계정 · 부서 · 상태 · 역할 · 처음 로그인 · 단추 (7열)
    계정에 긴 메일 주소가 들어오면 표가 눌려서 이름이 한 글자씩 끊겼다.
    짧은 칸은 줄바꿈을 막고, 좁으면 표째로 옆으로 밀리게 한다. */
-.mem-tbl { min-width: 720px; }
+/* 칸이 여덟이다 — 이름·계정·부서·담임·상태·역할·처음 로그인·단추.
+   좁으면 메일 주소가 한 글자씩 세로로 서고 단추가 표 밖으로 밀려난다.
+   좁은 화면에서는 표를 줄이지 말고 table-wrap 이 옆으로 밀게 둔다. */
+.mem-tbl { min-width: 900px; }
 .mem-tbl td, .mem-tbl th { vertical-align: middle; }
 .mem-tbl th, .mem-tbl td { white-space: nowrap; }
-/* 계정만 줄여 쓴다. 메일 주소는 길어도 표를 밀면 안 된다. */
+/* 계정만 줄여 쓴다. 메일 주소는 길어도 표를 밀면 안 된다.
+   다만 더 좁아지면 한 글자씩 서 버리므로 바닥을 받쳐 둔다. */
 .mem-tbl th:nth-child(2), .mem-tbl td:nth-child(2) {
-  white-space: normal; word-break: break-all; max-width: 240px;
+  white-space: normal; word-break: break-all; min-width: 170px; max-width: 240px;
 }
+/* 담임 칸 — '1학년' 넉 자가 들어가면 된다. 비워 두는 분이 더 많은 칸이다. */
+.mem-tbl td:nth-child(4) .input { width: 78px; }
 /* 상태·역할은 가운데로 모아 세로로 줄이 서게 한다. */
-.mem-tbl th:nth-child(4), .mem-tbl td:nth-child(4),
-.mem-tbl th:nth-child(5), .mem-tbl td:nth-child(5) { text-align: center; }
+.mem-tbl th:nth-child(5), .mem-tbl td:nth-child(5),
+.mem-tbl th:nth-child(6), .mem-tbl td:nth-child(6) { text-align: center; }
 .mem-tbl th:last-child, .mem-tbl td:last-child { text-align: right; }
 .mem-tbl td:last-child .row { justify-content: flex-end; }
 .mem-wait { background: var(--warn-bg); }

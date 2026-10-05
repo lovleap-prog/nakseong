@@ -47,7 +47,7 @@ export function membersBox(ctx) {
       h('td', {}, m.dept || ''),
       // 담임 학급. 보결을 정할 때 '1학년' 이 누구 반인지 알려면 이것이 있어야 한다.
       h('td', {}, h('input', {
-        class: 'input input-sm', value: m.homeroom || '', placeholder: '예) 1학년',
+        class: 'input input-sm', value: m.homeroom || '', placeholder: '1학년',
         title: '담임 학급. 보결을 정할 때 그 반이 누구 반인지 알려 줍니다.',
         onChange: (e) => change(m, { homeroom: e.target.value.trim() },
           e.target.value.trim() ? `${m.name || ''} — ${e.target.value.trim()} 담임으로 적었습니다.` : '담임 학급을 비웠습니다.'),
