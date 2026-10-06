@@ -958,6 +958,16 @@ body.dragging-now .band-grid { pointer-events: none; }
 .formdoc td.dt { border-top-style: dashed; }
 .formdoc td.db { border-bottom-style: dashed; }
 .formdoc td.sh { background: #f2f2f2; }
+/* 출장 줄은 연한 노랑, 방과후 줄은 옅은 파랑. 흑백으로 뽑아도 글씨가 묻히지 않을 만큼만. */
+.formdoc td.sh-y { background: #fff7d6; }
+.formdoc td.sh-b { background: #eaf1fa; }
+/* 쪽 나눔 — 화면에서는 종이 사이를 벌려 어디서 끊기는지 보여 준다. */
+.formdoc .pb { break-before: page; page-break-before: always; }
+.formdoc-wrap .formdoc .pb { margin-top: 18px; padding-top: 14px; border-top: 2px dashed #bbb; }
+.formdoc-wrap .formdoc .pb::before {
+  content: '— 2쪽 —'; display: block; text-align: center;
+  font-size: 10px; color: #999; margin-bottom: 8px;
+}
 .formdoc th { background: #eee; font-weight: 700; }
 
 /* 인쇄: 화면은 통째로 감추고 서식만 종이에 올린다. 새 창을 띄우지 않아 휴대폰에서도 된다. */
@@ -994,6 +1004,13 @@ body.dragging-now .band-grid { pointer-events: none; }
   body.printing #print-area td.sh {
     background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
+  body.printing #print-area td.sh-y {
+    background: #fff7d6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  body.printing #print-area td.sh-b {
+    background: #eaf1fa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  body.printing #print-area .pb { break-before: page; page-break-before: always; }
   body.printing #print-area th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body.printing #print-area thead { display: table-header-group; }
   body.printing #print-area tr { break-inside: avoid; }

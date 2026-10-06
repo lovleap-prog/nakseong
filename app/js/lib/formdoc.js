@@ -120,7 +120,7 @@ function weekRowsOf(date, from) {
     out.push({
       dept: '출장', owner: t.applicant,
       work: lines(t.reason, t.needsSub ? `- 보결 필요: ${t.subNote || '교시 미기재'}` : ''),
-      time: timeCell(t.time), place: t.place,
+      time: timeCell(t.time), place: t.place, trip: true,
     });
   }
   return out;
@@ -161,7 +161,9 @@ function weekMainTable(from, to) {
       // 어디까지가 같은 날인지 눈으로 바로 갈라 보라는 뜻이다.
       const dashTop = i > 0;                       // 그 날의 둘째 줄부터
       const dashBottom = i < items.length - 1;     // 그 날의 마지막 줄만 빼고
-      const shade = (many && i % 2 === 1) || off;
+      // 출장은 그 날 누가 자리를 비우는지라 한눈에 띄어야 한다. 연한 노랑으로 깐다.
+      // 줄 걸러 까는 회색보다 앞선다.
+      const shade = it.trip ? 'yellow' : (((many && i % 2 === 1) || off) ? 'grey' : '');
       const mark = (c) => (typeof c === 'object'
         ? { ...c, dashTop, dashBottom, shade }
         : { t: c, dashTop, dashBottom, shade });
@@ -181,7 +183,7 @@ function weekMainTable(from, to) {
       };
       rows.push([
         // 날짜 칸은 그 날 전체를 세로로 덮으니 줄 걸러 깔지 않는다. 공휴일일 때만 깐다.
-        ...(i === 0 ? [{ t: label, rowSpan: items.length, shade: off }] : []),
+        ...(i === 0 ? [{ t: label, rowSpan: items.length, shade: off ? 'grey' : '' }] : []),
         mark(fit(it.dept || '', 1)),
         mark(fitNames(it.owner || '', 2)),
         mark({ ...fit(it.work, 3), align: 'left' }),
@@ -193,34 +195,51 @@ function weekMainTable(from, to) {
   return { cols: WEEK_COLS.map((c) => c.w), head: WEEK_COLS.map((c) => c.label), rows, lastDay };
 }
 
-/** 그 주 교담·특별실 시간표 표 */
+// 교과교담 표의 첫 칸(교시·시각)은 '13:20~14:00' 열한 자가 한 줄에 들어가야 한다.
+// 11.7% 로는 모자라 '13:20~ / 14:00' 으로 접혔다.
+const TT_LABEL_W = 15;
+
+/**
+ * 그 주 교담·특별실 시간표 표.
+ *
+ * 줄이 죄다 흰 바탕이라 어디가 교시이고 어디가 방과후인지 눈에 들어오지 않았다.
+ * 왼쪽 교시 칸은 회색, 방과후는 옅은 파랑으로 깔고 사이에 띠를 한 줄 둔다.
+ */
 function weekTimetable(from) {
   const slots = list('timetable').filter((s) => s.week === from && s.title);
   const days = [1, 2, 3, 4, 5];
   const maxP = slots.reduce((m, s) => Math.max(m, Number(s.period) || 0), 0);
   const cell = (d, p) => slots.filter((s) => Number(s.dow) === d && Number(s.period) === p);
+  const cap = capEm(USABLE_WEEK, TT_LABEL_W, fontPt());
+  // fitText 는 { text, tight } 를 돌려준다. 칸은 t 를 본다 — 그대로 펼치면 글이 사라진다.
+  const label = (t, shade) => { const f = fitText(t, cap); return { t: f.text, tight: f.tight, shade }; };
 
   const rows = [];
   for (let p = 1; p <= maxP; p++) {
-    rows.push([`${p}교시`, ...days.map((d) => cell(d, p).map((s) => s.title).join('\n'))]);
+    rows.push([label(`${p}교시`, 'grey'), ...days.map((d) => cell(d, p).map((s) => s.title).join('\n'))]);
   }
 
   // 방과후는 교시가 아니라 시각으로 돌아간다. 시각마다 한 줄씩 붙인다.
   const prog = list('afterschool').filter((p) => p.active !== false);
   const times = [...new Set(prog.map((p) => p.time).filter(Boolean))].sort();
-  for (const t of times) {
-    rows.push([t, ...days.map((d) => prog
-      .filter((p) => (p.weekdays || []).includes(d) && p.time === t)
-      .map((p) => p.name).join('\n'))]);
+  if (times.length) {
+    // 1~6교시와 방과후는 성격이 다른 시간이다. 가로 띠 한 줄로 끊어 준다.
+    rows.push([{ t: '방과후학교', colSpan: days.length + 1, shade: 'blue' }]);
+    for (const t of times) {
+      rows.push([label(t, 'blue'), ...days.map((d) => prog
+        .filter((p) => (p.weekdays || []).includes(d) && p.time === t)
+        .map((p) => p.name).join('\n'))]);
+    }
   }
 
   const joinUniq = (xs) => [...new Set(xs.filter(Boolean))].join(' / ');
-  rows.push(['장소', ...days.map((d) => joinUniq(slots.filter((s) => Number(s.dow) === d).map((s) => s.place)))]);
-  rows.push(['비고', ...days.map((d) => joinUniq(slots.filter((s) => Number(s.dow) === d).map((s) => s.note)))]);
+  rows.push([label('장소', 'grey'),
+    ...days.map((d) => ({ t: joinUniq(slots.filter((s) => Number(s.dow) === d).map((s) => s.place)), shade: 'grey' }))]);
+  rows.push([label('비고', 'grey'),
+    ...days.map((d) => ({ t: joinUniq(slots.filter((s) => Number(s.dow) === d).map((s) => s.note)), shade: 'grey' }))]);
 
-  const w = 100 / (days.length + 1);
   return {
-    cols: [w * 0.7, ...days.map(() => (100 - w * 0.7) / days.length)],
+    cols: [TT_LABEL_W, ...days.map(() => (100 - TT_LABEL_W) / days.length)],
     head: ['', ...days.map((d) => WEEKDAY[d])],
     rows,
     empty: !slots.length && !times.length,
@@ -249,7 +268,8 @@ export function weeklyForm(from, to, { timetable = true } = {}) {
   if (meals) blocks.push({ kind: 'small', text: `※ 비급식일: ${meals}` });
   if (notice) blocks.push({ kind: 'small', text: `※ ${notice.replace(/\n/g, ' ')}` });
   if (timetable && !tt.empty) {
-    blocks.push({ kind: 'title', text: `${label} 교과교담` });
+    // 1쪽은 주요 교육활동, 2쪽은 교과교담. 결재에 올릴 때 쪽이 섞이지 않게 끊는다.
+    blocks.push({ kind: 'title', text: `${label} 교과교담`, brk: true });
     blocks.push({ kind: 'body', text: `${parseYmd(from).getFullYear()}. ${termOf(from)}학기 교담 시간표` });
     blocks.push({ kind: 'table', table: tt });
   }

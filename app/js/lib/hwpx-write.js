@@ -95,28 +95,38 @@ function headerXml(opt) {
 // 한 칸의 테두리·바탕 조합. 하루에 활동이 둘 이상이면 그 사이를 점선으로 끊고
 // 한 줄 걸러 옅은 바탕을 깔아, 어디까지가 같은 날인지 눈으로 바로 잡히게 한다.
 // 학교에서 쓰는 실제 주간계획 문서도 꼭 이 방식(DASH + winBrush)으로 되어 있다.
-const SHADE_COLOR = '#F2F2F2';
+// 칸 바탕색. 회색 하나뿐이었는데, 출장 줄과 방과후 줄을 갈라 보여야 해서 셋으로 늘렸다.
+// 결재 문서라 색은 아주 옅게 — 흑백으로 뽑아도 글씨가 묻히지 않을 만큼만.
+export const SHADES = ['', 'grey', 'yellow', 'blue'];
+const SHADE_COLOR = { grey: '#F2F2F2', yellow: '#FFF7D6', blue: '#EAF1FA' };
+/** 옛 자료의 shade:true 는 회색으로 본다. */
+const shadeIdx = (v) => {
+  if (!v) return 0;
+  if (v === true) return 1;
+  const i = SHADES.indexOf(v);
+  return i < 0 ? 1 : i;
+};
 const BF_BASE = 2;
-// 번호를 고정하려고 여덟 가지를 모두 미리 적어 둔다. 머리글은 본문과 따로 만들어지니
+// 번호를 고정하려고 열여섯 가지를 모두 미리 적어 둔다. 머리글은 본문과 따로 만들어지니
 // 쓰인 것만 골라 담을 수가 없다. 칸 하나가 고르는 번호는 bfIdOf() 가 같은 순서로 셈한다.
-const BF_COMBOS = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({
+const BF_COMBOS = [...Array(16).keys()].map((n) => ({
   type: 'SOLID',
   dashTop: !!(n & 1),
   dashBottom: !!(n & 2),
-  shade: !!(n & 4),
+  shade: SHADES[(n >> 2) & 3],
 }));
 
 /** 칸이 쓸 borderFill 번호. BF_COMBOS 의 차례와 반드시 같아야 한다. */
 export function bfIdOf(x) {
   if (!x) return BF_BASE;
-  return BF_BASE + (x.dashTop ? 1 : 0) + (x.dashBottom ? 2 : 0) + (x.shade ? 4 : 0);
+  return BF_BASE + (x.dashTop ? 1 : 0) + (x.dashBottom ? 2 : 0) + shadeIdx(x.shade) * 4;
 }
 
 function borderFill(id, k) {
   const line = (dir, type) => `<hh:${dir} type="${type}" width="0.12 mm" color="#000000"/>`;
   const t = k.type || 'SOLID';
   const fill = k.shade
-    ? `<hc:fillBrush><hc:winBrush faceColor="${SHADE_COLOR}" hatchColor="#999999" alpha="0"/></hc:fillBrush>`
+    ? `<hc:fillBrush><hc:winBrush faceColor="${SHADE_COLOR[k.shade] || SHADE_COLOR.grey}" hatchColor="#999999" alpha="0"/></hc:fillBrush>`
     : '';
   return `<hh:borderFill id="${id}" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">` +
     `<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>` +
@@ -150,12 +160,13 @@ function secPr(opt = {}) {
 }
 
 /** 문단 하나. kind: 'title' | 'body' | 'small' */
-function para(id, text, kind = 'body', first = false, opt = {}) {
+function para(id, text, kind = 'body', first = false, opt = {}, brk) {
   const charPr = kind === 'title' || kind === 'banner' ? 1 : kind === 'small' ? 2 : 0;
   const paraPr = kind === 'title' || kind === 'banner' ? 1 : 0;
   const inner = first ? firstCtrl(opt) : '';
   const t = text ? `<hp:t>${esc(text)}</hp:t>` : '<hp:t></hp:t>';
-  return `<hp:p id="${id}" paraPrIDRef="${paraPr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
+  // brk 를 켜면 이 문단부터 새 쪽에서 시작한다. 주간 서식의 교과교담 시간표가 쓴다.
+  return `<hp:p id="${id}" paraPrIDRef="${paraPr}" styleIDRef="0" pageBreak="${brk ? 1 : 0}" columnBreak="0" merged="0">` +
     `<hp:run charPrIDRef="${charPr}">${inner}${t}</hp:run>${LINESEG}</hp:p>`;
 }
 
@@ -213,7 +224,7 @@ function tblXml(t, opt, id) {
     const inner = paras.map((line) =>
       `<hp:p id="2147483648" paraPrIDRef="${paraPr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +
       `<hp:run charPrIDRef="${charPr}"><hp:t>${esc(line)}</hp:t></hp:run>${LINESEG}</hp:p>`).join('');
-    return `<hp:tc name="" header="${isHead(r) ? 1 : 0}" hasMargin="1" protect="0" editable="0" dirty="0" borderFillIDRef="${bfIdOf(x)}">` +
+    return `<hp:tc name="" header="${isHead(r) ? 1 : 0}" hasMargin="1" protect="0" editable="0" dirty="0" borderFillIDRef="${bfIdOf(isHead(r) ? { ...x, shade: 'grey' } : x)}">` +
       `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">` +
       inner + `</hp:subList>` +
       `<hp:cellAddr colAddr="${x.c}" rowAddr="${x.r}"/>` +
@@ -245,7 +256,7 @@ function tablePara(id, table, opt, first) {
 function sectionXml(blocks, opt = {}) {
   const body = blocks.map((b, i) => (b.kind === 'table'
     ? tablePara(i, b.table, opt, i === 0)
-    : para(i, b.text, b.kind, i === 0, opt))).join('');
+    : para(i, b.text, b.kind, i === 0, opt, !!b.brk))).join('');
   return XMLH +
     `<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core">` +
     body + `</hs:sec>`;
@@ -341,12 +352,12 @@ export function cellOf(c) {
     return {
       t: String(c.t == null ? '' : c.t),
       rowSpan: c.rowSpan || 1, colSpan: c.colSpan || 1, align: c.align || 'center',
-      dashTop: !!c.dashTop, dashBottom: !!c.dashBottom, shade: !!c.shade,
+      dashTop: !!c.dashTop, dashBottom: !!c.dashBottom, shade: c.shade || '',
       tight: c.tight || 0,
     };
   }
   return { t: String(c == null ? '' : c), rowSpan: 1, colSpan: 1, align: 'center',
-    dashTop: false, dashBottom: false, shade: false, tight: 0 };
+    dashTop: false, dashBottom: false, shade: '', tight: 0 };
 }
 
 /**
@@ -384,7 +395,10 @@ export function buildHtmlForHwp({
   td.l { text-align: left; }
   td.dt { border-top-style: dashed; }
   td.db { border-bottom-style: dashed; }
-  td.sh { background: ${SHADE_COLOR}; }
+  td.sh { background: #F2F2F2; }
+  td.sh-y { background: #FFF7D6; }
+  td.sh-b { background: #EAF1FA; }
+  .pb { break-before: page; page-break-before: always; }
   th { background: #eee; }
 </style></head>
 <body>
@@ -397,9 +411,17 @@ export function renderBlocksHtml(blocks) {
   return blocks.map(blockHtml).join('\n');
 }
 
+/** 칸 바탕색 → CSS 이름 */
+const shadeCls = (v) => {
+  if (!v) return '';
+  const k = v === true ? 'grey' : v;
+  return { grey: 'sh', yellow: 'sh-y', blue: 'sh-b' }[k] || 'sh';
+};
+
 function blockHtml(b) {
-  if (b.kind === 'table') return tableHtml(b.table);
-  if (b.kind === 'title') return `<h2>${esc(b.text)}</h2>`;
+  const pb = b.brk ? ' class="pb"' : '';
+  if (b.kind === 'table') return b.brk ? `<div class="pb">${tableHtml(b.table)}</div>` : tableHtml(b.table);
+  if (b.kind === 'title') return `<h2${pb}>${esc(b.text)}</h2>`;
   if (b.kind === 'banner') return `<p class="banner">${esc(b.text).replace(/\n/g, '<br>')}</p>`;
   if (b.kind === 'small') return `<p class="small">${esc(b.text) || '&nbsp;'}</p>`;
   return `<p>${esc(b.text) || '&nbsp;'}</p>`;
@@ -410,7 +432,7 @@ function tableHtml(t) {
     const x = cellOf(c);
     const sp = (x.rowSpan > 1 ? ` rowspan="${x.rowSpan}"` : '') + (x.colSpan > 1 ? ` colspan="${x.colSpan}"` : '');
     const names = [x.align === 'left' ? 'l' : '', x.dashTop ? 'dt' : '',
-      x.dashBottom ? 'db' : '', x.shade ? 'sh' : '',
+      x.dashBottom ? 'db' : '', shadeCls(x.shade),
       x.tight ? `t${x.tight}` : ''].filter(Boolean);
     const cls = names.length ? ` class="${names.join(' ')}"` : '';
     return `<${tag}${sp}${cls}>${esc(x.t).replace(/\n/g, '<br>') || '&nbsp;'}</${tag}>`;
