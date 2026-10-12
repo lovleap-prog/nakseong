@@ -635,7 +635,8 @@ export function renderDaily(ctx) {
       h('div', { class: 'sec-head' },
         h('h3', {}, `\u{1F697} 출장 ${trips.length}건`),
         h('div', { class: 'row gap' },
-          h('button', { class: 'btn btn-sm', onClick: () => openTripForm({ date: d }, rerender) }, '+ 출장 신청'),
+          // 날짜는 '미리 채울 값' 으로 넘긴다. 둘째 자리에 넣으면 '고치기' 가 되어 막힌다.
+          h('button', { class: 'btn btn-sm', onClick: () => openTripForm(null, rerender, { date: d }) }, '+ 출장 신청'),
           h('button', { class: 'btn btn-sm', onClick: () => ctx.go('trips') }, '출장 현황'))),
       trips.length
         ? h('div', { class: 'trip-strip' }, ...trips.map((t) => h('span', {

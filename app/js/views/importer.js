@@ -140,6 +140,9 @@ export function renderImporter(ctx) {
     const needDate = st.rows.filter((r) => r._include && !r.date).length;
     const autoApprove = h('input', { type: 'checkbox', checked: isAdmin() });
     // 손으로 고친 담당·계·분류를 기억해 둔다. 다음에 같은 활동이 오면 그대로 잡는다.
+    // 학습 사례는 학교가 함께 쓰는 자료라 관리자만 저장할 수 있다(서버 규칙). 교사
+    // 화면에 켜 두었더니 교육활동은 들어가고 그 다음 줄에서 막혀, 다 들어간 것을
+    // 실패한 줄 알고 다시 올리는 일이 생겼다. 관리자에게만 보인다.
     const learn = h('input', { type: 'checkbox', checked: true });
 
     preview.appendChild(h('div', { class: 'submit-bar' },
@@ -154,7 +157,7 @@ export function renderImporter(ctx) {
         },
       }, '담당자 다시 채우기') : null,
       isAdmin() ? h('label', { class: 'check' }, autoApprove, '등록과 동시에 승인') : null,
-      !asMode ? h('label', {
+      !asMode && admin ? h('label', {
         class: 'check',
         title: '활동명 → 담당·계·분류 를 기억합니다. [설정] → 담당자 자동 매칭에서 지울 수 있습니다.',
       }, learn, '고친 내용 기억하기') : null,
@@ -172,8 +175,14 @@ export function renderImporter(ctx) {
               name: r.title, time: r.time, grade: r.target, room: r.place,
               teacher: r.owner, note: r.detail || '', weekdays: guessWeekdays(r),
             }));
-            await putMany('afterschool', progs);
-            await audit('방과후일괄등록', `${progs.length}건`, null, { count: progs.length, source: st.source });
+            try {
+              await putMany('afterschool', progs);
+            } catch (e) {
+              console.error(e);
+              toast(e.message || '올리지 못했습니다.', 'warn');
+              return;
+            }
+            try { await audit('방과후일괄등록', `${progs.length}건`, null, { count: progs.length, source: st.source }); } catch (e) { console.error(e); }
             toast(`방과후 강좌 ${progs.length}건을 등록했습니다.`, 'ok');
             ctx.go('afterschool');
           } else {
@@ -190,9 +199,19 @@ export function renderImporter(ctx) {
               reviewedAt: approve ? new Date().toISOString() : '',
               _raw: r._raw || '',
             }));
-            await putMany('activities', acts);
-            await audit('일괄등록', `${acts.length}건`, null, { count: acts.length, source: st.source, approved: approve });
-            const learned = learn.checked ? await learnFromRows(rows) : 0;
+            try {
+              await putMany('activities', acts);
+            } catch (e) {
+              console.error(e);
+              toast(e.message || '올리지 못했습니다.', 'warn');
+              return;                   // 미리보기를 그대로 두어 다시 누를 수 있게 한다.
+            }
+            // 여기서부터는 곁가지다. 막혀도 교육활동은 이미 들어갔으니 실패로 보이면 안 된다.
+            try { await audit('일괄등록', `${acts.length}건`, null, { count: acts.length, source: st.source, approved: approve }); } catch (e) { console.error(e); }
+            let learned = 0;
+            if (admin && learn.checked) {
+              try { learned = await learnFromRows(rows); } catch (e) { console.error(e); }
+            }
             const learnNote = learned ? ` 담당·분류 ${learned}가지를 기억했습니다.` : '';
             toast((approve ? `${acts.length}건을 등록·승인했습니다.` : `${acts.length}건을 제출했습니다. ${admin ? '승인함' : '[내 제출]'}에서 확인하세요.`) + learnNote, 'ok');
             ctx.go(approve ? 'monthly' : 'approvals');

@@ -1,0 +1,173 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    function memberPath(school) {
+      return /databases/$(database)/documents/schools/$(school)/members/$(request.auth.uid);
+    }
+    function member(school) { return get(memberPath(school)).data; }
+
+    // 로그인만으로는 아무것도 못 본다. 관리자가 명단에서 승인해야 열린다.
+    // 선생님들이 개인 지메일·다음 메일을 쓰면 구글 도메인으로 막을 수가 없어서,
+    // '로그인했으면 통과' 로 두면 주소를 아는 사람이 아무 계정으로 들어와
+    // 출장 사유와 업무분장까지 다 보게 된다.
+    function ok(school) {
+      return signedIn() && exists(memberPath(school)) && member(school).approved == true;
+    }
+    function isAdmin(school) { return ok(school) && member(school).role == 'admin'; }
+
+    // 공지는 관리자 말고도 '공지 권한' 을 받은 사람이 쓴다.
+    // 공문 접수·안내장 수합을 담임께 알리는 일은 교무행정사가 하기 때문이다.
+    // 일정 승인 권한은 여기에 딸려 오지 않는다.
+    function canPost(school) {
+      return ok(school) && (member(school).role == 'admin' || member(school).canNotice == true);
+    }
+
+    // 출장 신청자 칸에 '정하늘아, 오진영' 처럼 둘이 적히는 일이 잦다. 글자 하나하나
+    // 맞춰 보면 본인도 제 신청을 못 고친다. 쉼표로 끊어 그 안에 있으면 본인으로 본다.
+    function amApplicant(school, applicant) {
+      return applicant == member(school).name
+          || member(school).name in applicant.split('\\s*,\\s*');
+    }
+
+    match /schools/{school}/members/{uid} {
+      // 자기 문서는 늘 읽을 수 있어야 한다. 그래야 '승인 대기' 화면을 띄운다.
+      allow get: if signedIn() && request.auth.uid == uid;
+      // 남의 것까지 보는 건 승인된 사람만
+      allow read: if ok(school);
+      // 첫 로그인: 본인 문서만, 교사로, 승인 안 된 상태로만 만들 수 있다.
+      // approved 를 스스로 true 로 넣지 못하게 막는 것이 이 줄의 핵심이다.
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'teacher'
+                    && request.resource.data.approved == false;
+      // 승인·역할 변경은 관리자만.
+      // 본인은 이름·부서만. role·approved·canNotice 는 스스로 올리지 못한다.
+      allow update: if isAdmin(school)
+                    || (signedIn() && request.auth.uid == uid
+                        && request.resource.data.role == resource.data.role
+                        && request.resource.data.approved == resource.data.approved
+                        && request.resource.data.get('canNotice', false)
+                           == resource.data.get('canNotice', false));
+      allow delete: if isAdmin(school);
+    }
+
+    match /schools/{school}/activities/{id} {
+      allow read: if ok(school);
+      // 교사는 '확인 대기' 상태로만 올릴 수 있다
+      allow create: if ok(school) &&
+        (isAdmin(school) || request.resource.data.status == 'pending');
+      // 승인/반려와 남의 글 수정은 관리자만.
+      // 교사는 아직 대기 중인 '자기 글'만 고칠 수 있다.
+      allow update: if isAdmin(school) ||
+        (ok(school)
+         && resource.data.status == 'pending'
+         && request.resource.data.status == 'pending'
+         && resource.data.createdBy == member(school).name) ||
+        // 이미 승인된 제 일정에 '삭제 요청' 만 달거나 거두는 것. 지우는 것은 관리자가 한다.
+        (ok(school)
+         && resource.data.createdBy == member(school).name
+         && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['delReq', 'delReqBy', 'delReqAt', 'delReqReason', 'updatedAt'])) ||
+        // 승인된 제 일정을 끌어 옮겼을 때 — 다시 '대기' 로 내려 관리자 확인을 받는다.
+        // 앱에는 이 길이 있는데(날짜 변경 요청) 규칙에 없어서 '권한이 없습니다' 로 막혔다.
+        (ok(school)
+         && resource.data.status == 'approved'
+         && request.resource.data.status == 'pending'
+         && resource.data.createdBy == member(school).name
+         && request.resource.data.createdBy == resource.data.createdBy);
+      allow delete: if isAdmin(school) ||
+        (ok(school) && resource.data.status == 'pending'
+         && resource.data.createdBy == member(school).name);
+    }
+
+    // 반복일정 · 방과후 시간표는 관리자만 고친다
+    match /schools/{school}/recurring/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+    match /schools/{school}/afterschool/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+
+    // 개인 확인 체크 — 문서 id 가 그 사람의 uid 다.
+    // 읽기도 본인만. 앱도 컬렉션 전체가 아니라 본인 문서 하나만 구독한다.
+    match /schools/{school}/checks/{uid} {
+      allow read, write: if ok(school) && request.auth.uid == uid;
+    }
+
+    // 개인 메모 — 문서 id 가 그 사람의 uid 다. 본인만 읽고 쓴다.
+    match /schools/{school}/memos/{uid} {
+      allow read, write: if ok(school) && request.auth.uid == uid;
+    }
+
+    // 공지사항 · 월별 중점지도 · 학사일정 · 시정표 — 읽기는 모두, 쓰기는 관리자만
+    match /schools/{school}/notices/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+    match /schools/{school}/academic/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+    match /schools/{school}/bells/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+    match /schools/{school}/daybell/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+    match /schools/{school}/timetable/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+
+    // 출장 — 본인이 신청하고, 승인·반려는 관리자만
+    match /schools/{school}/trips/{id} {
+      allow read: if ok(school);
+      allow create: if ok(school) &&
+        (isAdmin(school) || request.resource.data.status == 'pending');
+      allow update: if isAdmin(school) ||
+        (ok(school)
+         && resource.data.status == 'pending'
+         && request.resource.data.status == 'pending'
+         && amApplicant(school, resource.data.applicant));
+      allow delete: if isAdmin(school) ||
+        (ok(school) && resource.data.status == 'pending'
+         && amApplicant(school, resource.data.applicant));
+    }
+
+    // 공지 — 관리자와 '공지 권한' 받은 사람이 올린다.
+    // 남의 공지를 고치거나 내리는 것은 관리자만. 자기 것은 본인도 한다.
+    match /schools/{school}/board/{id} {
+      allow read: if ok(school);
+      allow create: if canPost(school) && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin(school)
+                            || (canPost(school) && resource.data.uid == request.auth.uid);
+    }
+
+    // 업무분장 · 학습 사례 — 읽기는 모두, 쓰기는 관리자만
+    match /schools/{school}/staff/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+    match /schools/{school}/lessons/{id} {
+      allow read: if ok(school);
+      allow write: if isAdmin(school);
+    }
+
+    // 이력은 남기기만 하고 고치지 못하게
+    match /schools/{school}/audit/{id} {
+      allow read: if ok(school);
+      allow create: if ok(school);
+      // 고쳐 쓰는 것은 누구도 못 한다. 이력이 이력 구실을 하려면 그래야 한다.
+      allow update: if false;
+      // 다만 관리자는 지울 수 있다. 앱이 반 년 지난 것을 알아서 치운다.
+      // 안 치우면 해마다 몇 천 건씩 늘어 새 컴퓨터가 그것을 다 받아오게 된다.
+      allow delete: if isAdmin(school);
+    }
+  }
+}

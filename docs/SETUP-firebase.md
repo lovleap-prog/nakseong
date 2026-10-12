@@ -71,6 +71,13 @@ service cloud.firestore {
       return ok(school) && (member(school).role == 'admin' || member(school).canNotice == true);
     }
 
+    // 출장 신청자 칸에 '정하늘아, 오진영' 처럼 둘이 적히는 일이 잦다. 글자 하나하나
+    // 맞춰 보면 본인도 제 신청을 못 고친다. 쉼표로 끊어 그 안에 있으면 본인으로 본다.
+    function amApplicant(school, applicant) {
+      return applicant == member(school).name
+          || member(school).name in applicant.split('\\s*,\\s*');
+    }
+
     match /schools/{school}/members/{uid} {
       // 자기 문서는 늘 읽을 수 있어야 한다. 그래야 '승인 대기' 화면을 띄운다.
       allow get: if signedIn() && request.auth.uid == uid;
@@ -108,7 +115,14 @@ service cloud.firestore {
         (ok(school)
          && resource.data.createdBy == member(school).name
          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['delReq', 'delReqBy', 'delReqAt', 'delReqReason', 'updatedAt']));
+              .hasOnly(['delReq', 'delReqBy', 'delReqAt', 'delReqReason', 'updatedAt'])) ||
+        // 승인된 제 일정을 끌어 옮겼을 때 — 다시 '대기' 로 내려 관리자 확인을 받는다.
+        // 앱에는 이 길이 있는데(날짜 변경 요청) 규칙에 없어서 '권한이 없습니다' 로 막혔다.
+        (ok(school)
+         && resource.data.status == 'approved'
+         && request.resource.data.status == 'pending'
+         && resource.data.createdBy == member(school).name
+         && request.resource.data.createdBy == resource.data.createdBy);
       allow delete: if isAdmin(school) ||
         (ok(school) && resource.data.status == 'pending'
          && resource.data.createdBy == member(school).name);
@@ -166,10 +180,10 @@ service cloud.firestore {
         (ok(school)
          && resource.data.status == 'pending'
          && request.resource.data.status == 'pending'
-         && resource.data.applicant == member(school).name);
+         && amApplicant(school, resource.data.applicant));
       allow delete: if isAdmin(school) ||
         (ok(school) && resource.data.status == 'pending'
-         && resource.data.applicant == member(school).name);
+         && amApplicant(school, resource.data.applicant));
     }
 
     // 공지 — 관리자와 '공지 권한' 받은 사람이 올린다.
@@ -204,6 +218,16 @@ service cloud.firestore {
   }
 }
 ```
+
+> 규칙을 고쳤으면 **[게시]** 를 눌러야 적용됩니다. 저장만 하면 그대로입니다.
+> 저장소 뿌리의 `firestore.rules` 에 같은 글이 들어 있습니다.
+
+### 규칙이 막는 바람에 겪었던 일
+
+| 무엇이 | 왜 | 어떻게 고쳤나 |
+|---|---|---|
+| 교사가 승인된 제 일정을 끌어 옮기면 막혔다 | 앱에는 '날짜 변경 요청'(승인 → 대기) 길이 있는데 규칙에 없었다 | `activities` 에 그 한 줄을 더했다 |
+| 신청자가 `정하늘아, 오진영` 인 출장을 본인이 못 고쳤다 | 이름을 글자 하나하나 맞춰 봤다 | `amApplicant()` 로 쉼표로 끊어 본다 |
 
 ## 6. 앱에 값 넣기
 

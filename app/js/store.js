@@ -106,10 +106,46 @@ export async function setMember(uid2, patch) {
 // ── 데이터 API ─────────────────────────────────────────────
 export function list(col) { return backend.list(col); }
 
+// 서버가 막은 것을 우리 말로 바꿔 적는다.
+//
+// 파이어스토어는 'Missing or insufficient permissions.' 한 줄만 돌려준다. 선생님
+// 화면에 그 영어가 그대로 떴고, 무엇을 어떻게 해야 하는지가 없어서 같은 단추를
+// 다섯 번 누르게 됐다(쪽지도 다섯 번 떴다). 어디서 막혔는지에 따라 할 일을 적어 준다.
+const DENIED = {
+  activities: '이미 승인된 일정은 관리 선생님만 고칠 수 있습니다. [삭제 요청] 을 쓰거나 관리 선생님께 말씀해 주세요.',
+  trips: '이미 승인된 출장은 관리 선생님만 고칠 수 있습니다. 고칠 것이 있으면 관리 선생님께 말씀해 주세요.',
+  lessons: '담당·분류 학습은 관리 선생님만 저장할 수 있습니다. 올리신 교육활동은 그대로 들어갔습니다.',
+  afterschool: '방과후 강좌는 관리 선생님만 고칠 수 있습니다.',
+  timetable: '시간표는 관리 선생님만 고칠 수 있습니다.',
+  academic: '학사일정은 관리 선생님만 고칠 수 있습니다.',
+  notices: '이 메모는 관리 선생님만 고칠 수 있습니다.',
+  bells: '시정표는 관리 선생님만 고칠 수 있습니다.',
+  daybell: '그 날 시정은 관리 선생님만 고칠 수 있습니다.',
+  recurring: '반복일정은 관리 선생님만 고칠 수 있습니다.',
+  staff: '업무분장 명단은 관리 선생님만 고칠 수 있습니다.',
+  board: '공지는 관리 선생님이나 공지 권한을 받은 분만 쓸 수 있습니다.',
+};
+
+/** 그 칸이 막혔을 때 보여 줄 말 (시험에서도 쓴다) */
+export function deniedMessage(col) {
+  return DENIED[col] || `이 내용을 저장할 권한이 없습니다(${col}). 관리 선생님께 말씀해 주세요.`;
+}
+
+/** 쓰다가 막혔을 때 우리 말로 바꿔 다시 던진다. 막힌 것이 아니면 그대로 올린다. */
+function rethrow(col, e) {
+  const msg = String((e && (e.code || e.message)) || '');
+  if (!/permission|insufficient|PERMISSION_DENIED/i.test(msg)) throw e;
+  const err = new Error(deniedMessage(col));
+  err.denied = true;
+  err.collection = col;
+  err.cause = e;
+  throw err;
+}
+
 export async function put(col, doc) {
   const rec = { ...doc, updatedAt: new Date().toISOString() };
   if (!rec.id) rec.id = uid(col.slice(0, 3));
-  await backend.put(col, rec);
+  try { await backend.put(col, rec); } catch (e) { rethrow(col, e); }
   emit(col);
   return rec;
 }
@@ -117,13 +153,13 @@ export async function put(col, doc) {
 export async function putMany(col, docs) {
   const now = new Date().toISOString();
   const recs = docs.map((d) => ({ ...d, id: d.id || uid(col.slice(0, 3)), updatedAt: now }));
-  await backend.putMany(col, recs);
+  try { await backend.putMany(col, recs); } catch (e) { rethrow(col, e); }
   emit(col);
   return recs;
 }
 
 export async function remove(col, id) {
-  await backend.remove(col, id);
+  try { await backend.remove(col, id); } catch (e) { rethrow(col, e); }
   emit(col);
 }
 

@@ -7,6 +7,17 @@ import { newTrip, fmtK, today, addDays, weekStart, STATUS } from '../model.js';
 import { list, put, remove, isAdmin, currentUser, audit } from '../store.js';
 import { planRows, planState, openSubForm } from './subplan.js';
 
+/**
+ * 이 출장이 내 것인가.
+ * 신청자 칸에 '정하늘아, 오진영' 처럼 둘이 적히는 일이 잦다. 글자 하나하나 맞춰 보면
+ * 본인도 제 신청을 못 고친다. 쉼표로 끊어 그 안에 있으면 본인으로 본다(서버 규칙도 같다).
+ */
+export function isMine(trip, name) {
+  const me = String(name || '').trim();
+  if (!me) return false;
+  return String(trip.applicant || '').split(/\s*,\s*/).some((n) => n.trim() === me);
+}
+
 const RANGES = [
   ['upcoming', '앞으로'],
   ['month', '이번 달'],
@@ -24,7 +35,7 @@ export function renderTrips(ctx) {
   const t0 = today();
   const monthPrefix = t0.slice(0, 7);
   const rows = all.filter((x) => {
-    if (st.range === 'mine') return x.applicant === me.name;
+    if (st.range === 'mine') return isMine(x, me.name);
     if (st.range === 'month') return String(x.date).slice(0, 7) === monthPrefix;
     if (st.range === 'upcoming') return (x.endDate || x.date) >= t0;
     return true;
@@ -92,7 +103,7 @@ function subCell(x, admin, refresh) {
 }
 
 function tripCard(x, me, admin, refresh) {
-  const mine = x.applicant === me.name;
+  const mine = isMine(x, me.name);
   const canEdit = admin || (mine && x.status === 'pending');
   const s = STATUS[x.status];
   const span = x.endDate && x.endDate > x.date;
@@ -156,10 +167,20 @@ const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input,
     hint ? h('span', { class: 'field-hint' }, hint) : null);
 
-export function openTripForm(existing, onSaved) {
+/**
+ * 출장 신청·수정 창.
+ *
+ * @param existing  고칠 출장. **없으면 새 신청이다.** 날짜만 미리 채우려고
+ *   여기에 { date } 를 넘기면 안 된다 — 그러면 '수정' 으로 보아 status 를 넣지 않고,
+ *   서버 규칙이 'pending 으로만 올릴 수 있다' 며 막는다. 관리자는 규칙을 그냥 지나서
+ *   아무도 몰랐고, 교사만 '권한이 없습니다' 를 보고 있었다. 날짜는 defaults 로 넘긴다.
+ * @param defaults  새 신청일 때 미리 채울 값 ({ date } 등)
+ */
+export function openTripForm(existing, onSaved, defaults = {}) {
   const me = currentUser();
+  const isNew = !existing;
   const x = existing ? structuredClone(existing) : newTrip({
-    date: today(), applicant: me.name, dept: me.dept,
+    date: today(), applicant: me.name, dept: me.dept, ...defaults,
   });
   const inp = {};
   const mk = (k, attrs = {}) => (inp[k] = h('input', { class: 'input', value: x[k] || '', ...attrs }));
@@ -189,10 +210,10 @@ export function openTripForm(existing, onSaved) {
       h('label', { class: 'check' }, subCb, h('strong', {}, '보결이 필요합니다'))),
     subWrap);
 
-  openModal(existing ? '출장 신청 수정' : '출장 신청', body, [
+  openModal(isNew ? '출장 신청' : '출장 신청 수정', body, [
     { label: '취소', onClick: (c) => c() },
     {
-      label: existing ? '저장' : '신청', class: 'btn-primary',
+      label: isNew ? '신청' : '저장', class: 'btn-primary',
       onClick: async (c) => {
         const v = (k) => (inp[k] ? inp[k].value.trim() : '');
         if (!v('date')) return toast('출장일을 입력해 주세요.', 'warn');
@@ -208,10 +229,20 @@ export function openTripForm(existing, onSaved) {
           applicant: v('applicant') || me.name, dept: v('dept'),
           needsSub: subCb.checked, subNote: subCb.checked ? subNote.value.trim() : '',
         };
-        if (!existing) after.status = isAdmin() ? 'approved' : 'pending';
-        await put('trips', after);
-        await audit(existing ? '출장수정' : '출장신청', after.id, existing || null, after);
-        toast(existing ? '저장했습니다.' : (after.status === 'approved' ? '등록했습니다.' : '신청했습니다. 관리자 확인을 기다립니다.'), 'ok');
+        if (isNew) after.status = isAdmin() ? 'approved' : 'pending';
+        // 옛 자료나 어딘가에서 status 없이 들어온 건이 있어도 여기서 메운다.
+        // 상태가 비면 서버가 막고, 화면에서는 '대기' 로도 '승인' 으로도 세지 않는다.
+        if (!after.status) after.status = isAdmin() ? 'approved' : 'pending';
+        try {
+          await put('trips', after);
+        } catch (e) {
+          console.error(e);
+          toast(e.message || '저장하지 못했습니다.', 'warn');
+          return;                       // 창을 열어 둔다. 적은 것을 잃지 않게.
+        }
+        // 이력은 남기지 못해도 본문은 이미 들어갔다. 여기서 막아서 '실패' 로 보이면 안 된다.
+        try { await audit(isNew ? '출장신청' : '출장수정', after.id, existing || null, after); } catch (e) { console.error(e); }
+        toast(isNew ? (after.status === 'approved' ? '등록했습니다.' : '신청했습니다. 관리자 확인을 기다립니다.') : '저장했습니다.', 'ok');
         c(); if (onSaved) onSaved();
       },
     },
