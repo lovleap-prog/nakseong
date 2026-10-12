@@ -7,10 +7,15 @@ import { openActivityForm } from '../ui/activityForm.js';
 import { activityCard } from './schedule.js';
 import { deleteRequests, approveDelete, rejectDelete } from '../del.js';
 import { revertDateChange } from '../dragmove.js';
+import { pendingTrips, tripReviewButtons, openTripForm, isMine } from './trips.js';
 
 export function renderApprovals(ctx) {
   const pending = pendingList();
   const me = currentUser();
+  // 출장도 여기서 처리한다. 여태 [출장] 탭에만 있어서, 승인함만 보던 관리 선생님은
+  // 누가 출장을 냈는지 몰랐다. 기다리는 것은 한 자리에 모여 있어야 한다.
+  const trips = pendingTrips();
+  const myTrips = trips.filter((t) => isMine(t, me.name));
   // 선생님이 승인된 제 일정을 지워 달라고 올린 것. 지우는 것은 관리자가 한다.
   const delReqs = deleteRequests(list('activities'));
   const mine = list('activities')
@@ -31,7 +36,12 @@ export function renderApprovals(ctx) {
   return h('div', { class: 'view' },
     h('div', { class: 'datebar' },
       h('div', { class: 'datebar-nav' },
-        h('strong', { class: 'datebar-label' }, isAdmin() ? `확인 대기 ${pending.length}건` : '내 제출 현황')),
+        h('strong', { class: 'datebar-label' }, isAdmin()
+          ? `확인 대기 ${pending.length + trips.length}건`
+          : '내 제출 현황'),
+        isAdmin() && trips.length
+          ? h('span', { class: 'muted small' }, `교육활동 ${pending.length} · 출장 ${trips.length}`)
+          : null),
       h('div', { class: 'datebar-actions' },
         isAdmin() && pending.length
           ? h('button', { class: 'btn btn-primary', onClick: approveAll }, '전체 승인')
@@ -44,22 +54,60 @@ export function renderApprovals(ctx) {
         ...delReqs.map((a) => delRow(a, refresh)))
       : null,
 
+    // 출장은 보결까지 걸려 있어 늦게 보면 그 날 수업이 빈다. 교육활동보다 위에 둔다.
+    isAdmin() && trips.length
+      ? h('section', { class: 'sec sec-trip-wait' },
+        h('div', { class: 'sec-head' }, h('h3', {}, `\u{1F697} 출장 확인 대기 ${trips.length}건`),
+          h('button', { class: 'btn btn-sm', onClick: () => ctx.go('trips') }, '출장 현황')),
+        ...trips.map((t) => tripRow(t, me, refresh)))
+      : null,
+
     isAdmin()
       ? h('section', { class: 'sec' },
-        h('div', { class: 'sec-head' }, h('h3', {}, '확인 대기'),
+        h('div', { class: 'sec-head' }, h('h3', {}, `교육활동 확인 대기 ${pending.length}건`),
           h('span', { class: 'muted small' }, '내용을 고쳐야 하면 [수정] 후 승인하세요.')),
         ...(pending.length ? pending.map((a) => pendingRow(a, me, refresh)) : [h('div', { class: 'empty' }, '대기 중인 일정이 없습니다.')]))
-      : h('section', { class: 'sec' },
-        h('div', { class: 'sec-head' }, h('h3', {}, '내가 제출한 대기 건')),
-        ...(pending.filter((a) => a.createdBy === me.name).length
-          ? pending.filter((a) => a.createdBy === me.name).map((a) => activityCard(a, { onChange: refresh, showStatus: true, showDate: true }))
-          : [h('div', { class: 'empty' }, '대기 중인 제출이 없습니다.')])),
+      : h('div', {},
+        h('section', { class: 'sec' },
+          h('div', { class: 'sec-head' }, h('h3', {}, '내가 제출한 대기 건')),
+          ...(pending.filter((a) => a.createdBy === me.name).length
+            ? pending.filter((a) => a.createdBy === me.name).map((a) => activityCard(a, { onChange: refresh, showStatus: true, showDate: true }))
+            : [h('div', { class: 'empty' }, '대기 중인 제출이 없습니다.')])),
+        // 선생님도 제 출장이 어디까지 왔는지 여기서 본다. [출장] 탭을 따로 열 일이 없게.
+        myTrips.length
+          ? h('section', { class: 'sec' },
+            h('div', { class: 'sec-head' }, h('h3', {}, `\u{1F697} 내 출장 신청 ${myTrips.length}건`),
+              h('button', { class: 'btn btn-sm', onClick: () => ctx.go('trips') }, '출장 현황')),
+            ...myTrips.map((t) => tripRow(t, me, refresh)))
+          : null),
 
     h('section', { class: 'sec' },
       h('div', { class: 'sec-head' }, h('h3', {}, isAdmin() ? '최근 처리 이력' : '내 최근 처리 결과')),
       isAdmin() ? auditTable() : (mine.length
         ? h('div', {}, ...mine.map((a) => activityCard(a, { compact: true, onChange: refresh, showStatus: true, showDate: true })))
         : h('div', { class: 'empty' }, '처리된 내역이 없습니다.'))));
+}
+
+/** 출장 한 줄 — 교육활동 대기 줄과 같은 모양으로 맞춘다. */
+function tripRow(t, me, refresh) {
+  const admin = isAdmin();
+  const span = t.endDate && t.endDate > t.date;
+  return h('div', { class: 'pending-row' },
+    h('div', { class: 'pending-date' }, fmtK(t.date, { year: false }),
+      span ? h('span', { class: 'muted small' }, ` ~ ${fmtK(t.endDate, { year: false })}`) : null),
+    h('div', { class: 'pending-main' },
+      h('div', { class: 'card-title-row' },
+        h('span', { class: 'card-title' }, t.reason || '(사유 없음)'),
+        h('span', { class: 'badge st-pending' }, '확인 대기'),
+        t.needsSub ? h('span', { class: 'badge badge-sub' }, '보결 필요') : null),
+      labeledChips([['신청', t.applicant], ['계', t.dept], ['시간', t.time], ['장소', t.place]]),
+      t.needsSub
+        ? h('p', { class: 'trip-sub' }, '보결: ',
+          t.subNote || h('span', { class: 'warn-text' }, '몇 교시인지 적혀 있지 않습니다'))
+        : null),
+    h('div', { class: 'pending-actions' },
+      ...tripReviewButtons(t, me, admin, refresh),
+      h('button', { class: 'icon-btn', title: '수정', onClick: () => openTripForm(t, refresh) }, '✎')));
 }
 
 /** 삭제 요청 한 줄 — 누가 왜 지워 달라고 했는지 보이고, 지우거나 물린다. */

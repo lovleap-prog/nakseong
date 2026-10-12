@@ -102,6 +102,52 @@ function subCell(x, admin, refresh) {
       : null);
 }
 
+/** 아직 확인하지 않은 출장 신청 */
+export function pendingTrips() {
+  return list('trips')
+    .filter((x) => x.status === 'pending')
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
+/** 출장 승인 — 승인함에서도 쓴다 */
+export async function approveTrip(x, by) {
+  const after = { ...x, status: 'approved', reviewedBy: by, reviewedAt: new Date().toISOString(), rejectReason: '' };
+  await put('trips', after);
+  await audit('출장승인', x.id, x, after);
+  return after;
+}
+
+/** 출장 반려 — 사유를 물어본다. 취소하면 null. */
+export async function rejectTrip(x, by) {
+  const why = await promptDialog('반려 사유를 적어주세요.', { placeholder: '예) 같은 날 학교 행사가 있습니다.' });
+  if (why === null) return null;
+  const after = { ...x, status: 'rejected', rejectReason: why, reviewedBy: by, reviewedAt: new Date().toISOString() };
+  await put('trips', after);
+  await audit('출장반려', x.id, x, after);
+  return after;
+}
+
+/** [승인]·[반려] 단추 — 출장 탭과 승인함이 같은 것을 쓴다 */
+export function tripReviewButtons(x, me, admin, refresh) {
+  if (!admin || x.status !== 'pending') return [];
+  return [
+    h('button', {
+      class: 'btn btn-sm btn-primary',
+      onClick: async () => {
+        try { await approveTrip(x, me.name); } catch (e) { return toast(e.message || '승인하지 못했습니다.', 'warn'); }
+        toast('승인했습니다.', 'ok'); refresh();
+      },
+    }, '승인'),
+    h('button', {
+      class: 'btn btn-sm btn-danger',
+      onClick: async () => {
+        try { if (!(await rejectTrip(x, me.name))) return; } catch (e) { return toast(e.message || '반려하지 못했습니다.', 'warn'); }
+        toast('반려했습니다.', 'ok'); refresh();
+      },
+    }, '반려'),
+  ];
+}
+
 function tripCard(x, me, admin, refresh) {
   const mine = isMine(x, me.name);
   const canEdit = admin || (mine && x.status === 'pending');
@@ -129,30 +175,7 @@ function tripCard(x, me, admin, refresh) {
       x.status === 'rejected' && x.rejectReason
         ? h('p', { class: 'card-reject' }, `반려 사유: ${x.rejectReason}`) : null),
     h('div', { class: 'card-actions' },
-      admin && x.status === 'pending'
-        ? h('button', {
-          class: 'btn btn-sm btn-primary',
-          onClick: async () => {
-            const after = { ...x, status: 'approved', reviewedBy: me.name, reviewedAt: new Date().toISOString(), rejectReason: '' };
-            await put('trips', after);
-            await audit('출장승인', x.id, x, after);
-            toast('승인했습니다.', 'ok'); refresh();
-          },
-        }, '승인')
-        : null,
-      admin && x.status === 'pending'
-        ? h('button', {
-          class: 'btn btn-sm btn-danger',
-          onClick: async () => {
-            const why = await promptDialog('반려 사유를 적어주세요.', { placeholder: '예) 같은 날 학교 행사가 있습니다.' });
-            if (why === null) return;
-            const after = { ...x, status: 'rejected', rejectReason: why, reviewedBy: me.name, reviewedAt: new Date().toISOString() };
-            await put('trips', after);
-            await audit('출장반려', x.id, x, after);
-            toast('반려했습니다.', 'ok'); refresh();
-          },
-        }, '반려')
-        : null,
+      ...tripReviewButtons(x, me, admin, refresh),
       canEdit ? h('button', { class: 'icon-btn', title: '수정', onClick: () => openTripForm(x, refresh) }, '✎') : null,
       canEdit ? h('button', {
         class: 'icon-btn danger', title: '삭제',

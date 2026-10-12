@@ -23,6 +23,7 @@ app/
     store.js              저장소 파사드 + 로컬(브라우저) 백엔드
     store-firestore.js    Firestore 백엔드 (실시간 구독 · 구글 로그인)
     select.js             화면 공통 조회
+    todo.js               관리자가 아직 손대지 않은 것 세기 (머리말 🔔)
     lib/
       dom.js              DOM 헬퍼 · 모달 · 토스트 · 다운로드
       zip.js              의존성 없는 ZIP 읽기/쓰기

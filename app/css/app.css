@@ -730,6 +730,43 @@ body.dragging-now .band-grid { pointer-events: none; }
 }
 .sub-wrap { background: var(--warn-bg); border-radius: 8px; padding: 10px 12px; }
 
+/* ── 머리말 알림 단추 ──────────────────
+   기다리는 것이 있을 때만 그린다. 어느 탭에 있든 보인다. */
+.todo-wrap { position: relative; }
+.todo-btn { display: inline-flex; align-items: center; gap: 5px; }
+.todo-btn .todo-n {
+  background: var(--warn); color: #fff; font-weight: 700; font-size: 11.5px;
+  border-radius: 999px; padding: 0 6px; min-width: 18px; text-align: center;
+}
+.todo-btn.on { border-color: var(--warn); }
+.todo-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 10px; min-width: 280px;
+}
+.todo-pop h4 { font-size: 13px; margin: 0 0 6px; }
+.todo-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; border-radius: 7px; padding: 7px 8px;
+  cursor: pointer; text-align: left; font-size: 13px;
+}
+.todo-row:hover { background: var(--panel-2); }
+.todo-label { font-weight: 600; }
+.todo-hint { color: var(--muted); font-size: 11.5px; }
+.todo-cnt {
+  margin-left: auto; background: var(--warn-bg); color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
+  border-radius: 999px; padding: 1px 9px; font-weight: 700; font-size: 12px;
+}
+.todo-pop .muted.small { margin: 6px 2px 0; }
+/* 휴대전화에서는 단추에 매달면 화면 밖으로 나간다. 화면에 맞춰 띄운다. */
+@media (max-width: 640px) {
+  .todo-wrap { position: static; }
+  .todo-pop { position: fixed; left: 10px; right: 10px; top: 56px; min-width: 0; }
+}
+/* 출장은 보결까지 걸려 있어 늦게 보면 그 날 수업이 빈다. 승인함에서 먼저 선다. */
+.sec-trip-wait { border-left: 4px solid var(--warn); }
+
 /* 앞으로 못 정한 보결 — 한 줄. 오늘 할 일이 아니라 곧 할 일이라 조용히 둔다. */
 .sub-ahead {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

@@ -19,6 +19,7 @@ import { renderApprovals } from './views/approvals.js';
 import { renderImporter } from './views/importer.js';
 import { renderSettings } from './views/settings.js';
 import { dayBundle, pendingList, myPendingCount, isNoMeal } from './select.js';
+import { todoList, todoCount, todoSnapshot, newlyAdded, TODO_LABEL } from './todo.js';
 import { postsIn } from './views/board.js';
 import { mySubs } from './views/subplan.js';
 import { isChecked, toggleCheck } from './checks.js';
@@ -67,6 +68,7 @@ const state = {
   state: {},   // 각 화면이 쓰는 임시 상태
   memoOpen: (() => { try { return !!localStorage.getItem('sam.memoOpen'); } catch { return false; } })(),
   userMenu: false,   // 머리말 이름 단추를 눌러 연 상태
+  todoOpen: false,   // 머리말 알림 단추를 눌러 연 상태
   moreOpen: false,   // 휴대전화 아래 탭바의 [관리] 를 펼친 상태
 };
 
@@ -151,6 +153,25 @@ async function boot() {
   // 데이터가 바뀌면 화면을 다시 그린다(다른 선생님의 입력이 바로 보인다).
   on('*', () => render());
 
+  // 앱을 열어 둔 사이에 새로 올라온 것을 그 자리에서 알린다.
+  //
+  // 자료는 실시간으로 들어오는데 화면만 조용히 바뀌었다. 다른 탭을 보고 있으면
+  // 출장 신청이 올라온 줄을 모른다. 숫자가 늘었을 때만, 관리자에게만 쪽지를 띄운다.
+  // 건수만 보면 '하나 승인되고 하나 올라온' 경우를 놓쳐서 종류별로 견준다.
+  if (!isWidget) {
+    let seen = null;
+    on('*', () => {
+      if (!isAdmin()) { seen = null; return; }
+      const now = todoSnapshot();
+      if (seen === null) { seen = now; return; }   // 처음 들어온 것은 알리지 않는다
+      const added = newlyAdded(seen, now);
+      seen = now;
+      for (const a of added) {
+        toast(`\u{1F514} ${TODO_LABEL[a.key] || '새 알림'} ${a.more}건이 올라왔습니다.`, 'warn');
+      }
+    });
+  }
+
   readHash();
   render();
   // 위젯(작은 창)은 보기 전용이라 이름을 묻지 않는다.
@@ -212,6 +233,14 @@ function syncHash() {
 }
 window.addEventListener('hashchange', () => { readHash(); render(); });
 
+// 바탕을 누르면 머리말에서 펼친 것을 닫는다. 이름 단추가 쓰던 길에 알림도 얹는다.
+document.addEventListener('click', (e) => {
+  if (!state.todoOpen) return;
+  if (e.target.closest('.todo-wrap')) return;
+  state.todoOpen = false;
+  render();
+}, true);
+
 function askName() {
   const nameIn = h('input', { class: 'input', placeholder: '예) 김민수' });
   const deptIn = h('input', { class: 'input', placeholder: '예) 교무기획부' });
@@ -242,7 +271,7 @@ function header(opt = {}) {
   const bare = !!opt.bare;
   // 탭의 숫자는 그 탭 안에 보이는 건수와 같아야 한다.
   // 관리자: 학교 전체 대기. 교사: 내가 낸 대기만.
-  const pend = bare ? 0 : (isAdmin() ? pendingList().length : myPendingCount(me.name));
+  const pend = bare ? 0 : (isAdmin() ? todoCount() : myPendingCount(me.name));
 
   return h('header', { class: 'top' },
     h('div', { class: 'brand' },
@@ -255,6 +284,7 @@ function header(opt = {}) {
       h('span', { class: `conn ${backendKind()}` },
         backendKind() === 'firestore' ? '실시간 공유' : '이 컴퓨터 저장'),
       ...(bare ? [] : [
+        todoButton(),
         memoButton(),
         h('button', {
           class: 'btn btn-sm widget-btn', title: '작은 창으로 띄우기 (바탕화면 한쪽에 두고 보기 좋습니다)',
@@ -268,6 +298,40 @@ function header(opt = {}) {
         onClick: () => ctx.go(key),
       }, tabLabel(key, label),
         key === 'approvals' && pend ? h('span', { class: 'tab-badge' }, pend) : null))));
+}
+
+/**
+ * 머리말의 알림 단추 — 기다리는 것이 있으면 숫자를 띄운다.
+ *
+ * 교육활동 승인은 [승인함], 출장은 [출장], 보결은 [일일] 에 흩어져 있었다. 아침에
+ * 다섯 군데를 눌러 보지 않으면 뭔가 올라왔는지 알 수가 없다. 어느 탭에 있든 보이는
+ * 자리에 수를 세워 두고, 눌러서 바로 그 자리로 간다. 기다리는 것이 없으면 안 그린다.
+ */
+function todoButton() {
+  if (!isAdmin()) return null;
+  const items = todoList();
+  if (!items.length) return null;
+  const n = items.reduce((a, x) => a + x.count, 0);
+
+  const btn = h('button', {
+    class: `btn btn-sm todo-btn${state.todoOpen ? ' on' : ''}`,
+    title: '기다리는 일 보기',
+    'aria-expanded': String(!!state.todoOpen),
+    onClick: () => { state.todoOpen = !state.todoOpen; state.userMenu = false; render(); },
+  }, '\u{1F514}', h('span', { class: 'todo-n' }, n));
+
+  if (!state.todoOpen) return btn;
+  return h('div', { class: 'todo-wrap' }, btn,
+    h('div', { class: 'todo-pop', role: 'menu' },
+      h('h4', {}, `기다리는 일 ${n}건`),
+      ...items.map((x) => h('button', {
+        class: 'todo-row', role: 'menuitem',
+        onClick: () => { state.todoOpen = false; ctx.go(x.tab); },
+      },
+        h('span', { class: 'todo-label' }, x.label),
+        x.hint ? h('span', { class: 'todo-hint' }, x.hint) : null,
+        h('span', { class: 'todo-cnt' }, x.count))),
+      h('p', { class: 'muted small' }, '줄을 누르면 그 자리로 갑니다.')));
 }
 
 /**
