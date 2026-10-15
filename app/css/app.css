@@ -1085,7 +1085,7 @@ body.dragging-now .band-grid { pointer-events: none; }
 /* 칸이 여덟이다 — 이름·계정·부서·담임·상태·역할·처음 로그인·단추.
    좁으면 메일 주소가 한 글자씩 세로로 서고 단추가 표 밖으로 밀려난다.
    좁은 화면에서는 표를 줄이지 말고 table-wrap 이 옆으로 밀게 둔다. */
-.mem-tbl { min-width: 900px; }
+.mem-tbl { min-width: 1010px; }
 .mem-tbl td, .mem-tbl th { vertical-align: middle; }
 .mem-tbl th, .mem-tbl td { white-space: nowrap; }
 /* 계정만 줄여 쓴다. 메일 주소는 길어도 표를 밀면 안 된다.
@@ -1204,6 +1204,12 @@ body.dragging-now .band-grid { pointer-events: none; }
   display: inline-block; padding: 1px 9px; border-radius: 999px;
   font-size: 12px; font-weight: 600; white-space: nowrap; border: none;
   background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok);
+}
+/* 일정 수정 권한 — 공지와 다른 권한이라 색을 달리한다. */
+.chip-edit {
+  display: inline-block; padding: 1px 9px; border-radius: 999px; margin-left: 3px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; border: none;
+  background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand);
 }
 .btn.on { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
 

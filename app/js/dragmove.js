@@ -13,7 +13,7 @@
 //            원래 날짜를 prevDate 에 적어두어, 반려되면 되돌릴 수 있게 한다.
 import { toast, confirmDialog } from './lib/dom.js';
 import { fmtK, parseYmd, addDays, ymd } from './model.js';
-import { get, put, audit, isAdmin, currentUser } from './store.js';
+import { get, put, audit, isAdmin, canEditActs, currentUser } from './store.js';
 
 const dayDiff = (from, to) => Math.round((parseYmd(to) - parseYmd(from)) / 864e5);
 
@@ -26,7 +26,7 @@ export function canMove(a) {
   if (!a) return false;
   if (a.canDrag) return true;          // 시간표 칸처럼 스스로 판정을 끝낸 경우
   if (a.isRecurring || a.source === 'recurring') return false;
-  return isAdmin() || a.createdBy === currentUser().name;
+  return isAdmin() || canEditActs() || a.createdBy === currentUser().name;
 }
 
 let st = null;   // 끄는 중인 상태
@@ -195,7 +195,8 @@ export async function moveActivity(id, toDate) {
   };
   const label = `${fmtK(a.date, { year: false })} → ${fmtK(toDate, { year: false })}`;
 
-  if (isAdmin()) {
+  // 고칠 권한이 있는 분(관리자·교무행정사)은 그대로 옮긴다. 승인 상태는 건드리지 않는다.
+  if (isAdmin() || canEditActs()) {
     next.history = (a.history || []).concat([{
       at: new Date().toISOString(), by: me.name, action: `날짜 이동 ${label}`,
     }]);

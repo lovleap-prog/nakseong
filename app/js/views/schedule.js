@@ -12,7 +12,7 @@ import { canDelete, deleteOrRequest, delTitle } from '../del.js';
 import { openDayExport, openPeriodExport } from '../ui/exporter.js';
 import { loadConfig } from '../config.js';
 import { holidayOn } from '../lib/holidays.js';
-import { isAdmin, put, remove, audit, currentUser, list } from '../store.js';
+import { isAdmin, canEditActs, put, remove, audit, currentUser, list } from '../store.js';
 import { isChecked, toggleCheck, clearChecks, countChecked } from '../checks.js';
 import { makeDraggable, makeDropTarget, canMove } from '../dragmove.js';
 import { noticeBox } from './notice.js';
@@ -42,7 +42,9 @@ export function statusBadge(a, { showAll = false } = {}) {
  */
 export function activityCard(a, { compact = false, onChange, checkDate = '', showCheck = false, showStatus = false, clash = null, showDate = false, onOpen = null } = {}) {
   const chips = [['대상', a.target], ['장소', a.place], ['담당', a.owner], ['계', a.dept]];
-  const canEdit = isAdmin() || a.createdBy === currentUser().name;
+  // 고칠 권한을 받은 분(교무행정사)도 남의 것을 고친다. 장소가 틀린 것을 먼저 보는
+  // 일이 잦은데, 그때마다 관리 선생님께 말씀드려 고치게 하면 하루가 간다.
+  const canEdit = isAdmin() || canEditActs() || a.createdBy === currentUser().name;
   const done = isChecked(checkDate, a);
   const detail = cleanDetail(a.detail);
   const card = h('div', { class: `card cat-${a.category}${hlClass(a)}${a.status === 'pending' ? ' is-pending' : ''}${done ? ' is-done' : ''}${showCheck ? ' has-check' : ''}${clash ? ' is-clash' : ''}` },
@@ -80,16 +82,20 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
         h('button', { class: 'icon-btn', title: '수정', onClick: () => openActivityForm(a, { onSaved: onChange }) }, '✎'),
         // 강조는 창을 열지 않고 그 자리에서 색만 바꾼다. 여러 건을 훑으며 칠하는 일이라서다.
         // 늘 쓰던 ✎ 는 자리를 지킨다. 손이 기억하는 자리를 옮기면 잘못 누른다.
-        isAdmin()
+        canEditActs()
           ? h('button', {
             class: `icon-btn hl-btn${a.hl ? ' on' : ''}`, title: '음영 강조 색 고르기',
             onClick: () => openHiliteMenu(a, onChange),
           }, '\u{1F3A8}')
           : null,
-        h('button', {
-          class: `icon-btn danger${a.delReq ? ' on' : ''}`, title: delTitle(a),
-          onClick: () => deleteOrRequest(a, onChange),
-        }, '✕'))
+        // 지우기는 고치기와 다른 권한이다. 남의 것을 고칠 수 있다고 지울 수 있는 것은
+        // 아니다 — 서버 규칙도 그렇게 되어 있어, 보여 주기만 하면 눌러도 막힌다.
+        canDelete(a)
+          ? h('button', {
+            class: `icon-btn danger${a.delReq ? ' on' : ''}`, title: delTitle(a),
+            onClick: () => deleteOrRequest(a, onChange),
+          }, '✕')
+          : null)
       : null);
 
   // 좁은 칸(주간)에서는 눌러서 그 날 일일 화면으로 간다.

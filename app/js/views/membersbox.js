@@ -55,9 +55,12 @@ export function membersBox(ctx) {
       h('td', {}, m.approved
         ? h('span', { class: 'chip chip-ok' }, '승인됨')
         : h('span', { class: 'chip chip-wait' }, '대기')),
-      h('td', {}, m.role === 'admin'
+      h('td', { class: 'row gap wrap' }, m.role === 'admin'
         ? h('span', { class: 'chip chip-admin' }, '관리자')
-        : (m.canNotice ? h('span', { class: 'chip chip-notice' }, '공지') : '교사')),
+        : h('span', {},
+          m.canNotice ? h('span', { class: 'chip chip-notice' }, '공지') : null,
+          m.canEdit ? h('span', { class: 'chip chip-edit' }, '일정 수정') : null,
+          !m.canNotice && !m.canEdit ? '교사' : null)),
       h('td', { class: 'small muted' }, fmtWhen(m.joinedAt)),
       h('td', { class: 'row gap nowrap' },
         m.approved
@@ -97,6 +100,17 @@ export function membersBox(ctx) {
               onClick: () => change(m, { canNotice: !m.canNotice },
                 m.canNotice ? '공지 권한을 거뒀습니다.' : '공지를 쓸 수 있게 했습니다.'),
             }, m.canNotice ? '공지 끄기' : '공지 권한')
+          : null,
+        // 고치기만 따로 준다. 장소가 틀린 것을 교무행정사가 먼저 보는 일이 잦다.
+        m.approved && m.role !== 'admin'
+          ? h('button', {
+              class: `btn btn-sm${m.canEdit ? ' on' : ''}`,
+              title: m.canEdit
+                ? '일정 수정 권한을 거둡니다'
+                : '이 분도 남의 교육활동을 고칠 수 있게 합니다 (승인·반려·삭제는 주지 않습니다)',
+              onClick: () => change(m, { canEdit: !m.canEdit },
+                m.canEdit ? '일정 수정 권한을 거뒀습니다.' : '일정을 고칠 수 있게 했습니다.'),
+            }, m.canEdit ? '수정 끄기' : '일정 수정 권한')
           : null));
   };
 
@@ -110,6 +124,11 @@ export function membersBox(ctx) {
       '공문 접수·안내장 수합을 알려야 하는 분께 주세요. ',
       '공지만 쓸 수 있고 ', h('b', {}, '일정 승인·수정 권한은 생기지 않습니다.'),
       ' 관리자는 따로 주지 않아도 공지를 씁니다.'),
+    h('p', { class: 'note' },
+      h('b', {}, '[일정 수정 권한]'), ' 은 ', h('b', {}, '남의 교육활동도 고칠 수 있게'), ' 합니다. ',
+      '장소가 틀린 것을 교무행정사가 먼저 보는 일이 잦기 때문입니다. ',
+      h('b', {}, '승인·반려와 삭제는 주지 않습니다.'), ' 그것은 관리자 몫으로 남습니다. ',
+      '고친 것은 변경 이력에 ', h('b', {}, "'수정(위임)'"), ' 으로 남습니다.'),
 
     waiting.length
       ? h('p', { class: 'warn-line' }, `⏳ ${waiting.length}분이 승인을 기다리고 있습니다.`)

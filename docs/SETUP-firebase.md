@@ -71,6 +71,13 @@ service cloud.firestore {
       return ok(school) && (member(school).role == 'admin' || member(school).canNotice == true);
     }
 
+    // 남의 교육활동을 고칠 수 있는 사람. 장소가 틀린 것을 교무행정사가 먼저 보는 일이
+    // 잦아 '고치기' 만 따로 열어 둔다. 공지 권한과는 별개다 — 공지만 맡기고 싶은
+    // 분이 있을 수 있어서다. 승인·반려와 지우기는 그대로 관리자 몫이다.
+    function canEditActs(school) {
+      return ok(school) && (member(school).role == 'admin' || member(school).canEdit == true);
+    }
+
     // 출장 신청자 칸에 '정하늘아, 오진영' 처럼 둘이 적히는 일이 잦다. 글자 하나하나
     // 맞춰 보면 본인도 제 신청을 못 고친다. 쉼표로 끊어 그 안에 있으면 본인으로 본다.
     function amApplicant(school, applicant) {
@@ -95,7 +102,9 @@ service cloud.firestore {
                         && request.resource.data.role == resource.data.role
                         && request.resource.data.approved == resource.data.approved
                         && request.resource.data.get('canNotice', false)
-                           == resource.data.get('canNotice', false));
+                           == resource.data.get('canNotice', false)
+                        && request.resource.data.get('canEdit', false)
+                           == resource.data.get('canEdit', false));
       allow delete: if isAdmin(school);
     }
 
@@ -122,6 +131,10 @@ service cloud.firestore {
          && resource.data.status == 'approved'
          && request.resource.data.status == 'pending'
          && resource.data.createdBy == member(school).name
+         && request.resource.data.createdBy == resource.data.createdBy) ||
+        // 고칠 권한을 받은 분 — 장소·시간 같은 내용만. 승인 상태와 올린 사람은 그대로 둔다.
+        (canEditActs(school)
+         && request.resource.data.status == resource.data.status
          && request.resource.data.createdBy == resource.data.createdBy);
       allow delete: if isAdmin(school) ||
         (ok(school) && resource.data.status == 'pending'
@@ -228,6 +241,17 @@ service cloud.firestore {
 |---|---|---|
 | 교사가 승인된 제 일정을 끌어 옮기면 막혔다 | 앱에는 '날짜 변경 요청'(승인 → 대기) 길이 있는데 규칙에 없었다 | `activities` 에 그 한 줄을 더했다 |
 | 신청자가 `정하늘아, 오진영` 인 출장을 본인이 못 고쳤다 | 이름을 글자 하나하나 맞춰 봤다 | `amApplicant()` 로 쉼표로 끊어 본다 |
+| 교무행정사가 남의 일정의 틀린 장소를 못 고쳤다 | 고치는 것은 관리자와 본인뿐이었다 | `canEditActs()` 로 '고치기' 만 따로 연다 |
+
+### 권한 세 가지
+
+| 권한 | 주는 곳 | 되는 것 | 안 되는 것 |
+|---|---|---|---|
+| **관리자** | 명단의 [관리자로] | 다 됩니다 | — |
+| **공지 권한** | 명단의 [공지 권한] | 공지 쓰기·고치기 | 일정 승인·수정 |
+| **일정 수정 권한** | 명단의 [일정 수정 권한] | 남의 교육활동 고치기, 날짜 옮기기, 음영 강조 | 승인·반려·삭제 |
+
+두 권한은 **따로** 줍니다. 공지만 맡기고 싶은 분이 있을 수 있어서입니다.
 
 ## 6. 앱에 값 넣기
 

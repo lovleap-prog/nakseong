@@ -46,6 +46,19 @@ export const isApproved = () => user.approved !== false;
  */
 export const canPost = () => isApproved() && (user.role === 'admin' || user.canNotice === true);
 
+/**
+ * 남의 교육활동을 고칠 수 있는가.
+ *
+ * 장소가 틀린 것을 교무행정사가 먼저 보는 일이 잦다. 그때마다 관리 선생님께 말씀드려
+ * 고치게 하면 하루가 간다. 고치는 것만 따로 열어 둔다.
+ *
+ * **공지 권한과 따로 둔다.** 공지만 맡기고 싶은 분이 있을 수 있고, 여태 '공지 권한은
+ * 일정에 손대지 않는다' 고 적어 두었기 때문이다. 그 말이 조용히 뒤집히면 안 된다.
+ *
+ * 고치기만 된다. 승인·반려와 지우기는 그대로 관리자 몫이다.
+ */
+export const canEditActs = () => isApproved() && (user.role === 'admin' || user.canEdit === true);
+
 // ── 이벤트 버스 ─────────────────────────────────────────────
 const listeners = new Map();
 export function on(topic, cb) {

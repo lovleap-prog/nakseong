@@ -5,7 +5,7 @@
 // 여기에 겹쳐 쓸 수 없다. 그래서 강조 색을 따로 둔다.
 import { h, openModal, toast } from '../lib/dom.js';
 import { HILITE, hiliteOk } from '../model.js';
-import { put, audit, isAdmin } from '../store.js';
+import { put, audit, canEditActs } from '../store.js';
 
 /**
  * 색 단추 줄. 고르면 onPick(key) 를 부른다. 다시 고르면 꺼진다.
@@ -34,7 +34,7 @@ export function hilitePicker(value, onPick) {
 
 /** 카드의 🎨 단추 — 창을 열지 않고 그 자리에서 색만 바꾼다. */
 export function openHiliteMenu(a, onSaved) {
-  if (!isAdmin()) return;
+  if (!canEditActs()) return;
   let picked = a.hl || '';
   const close = openModal('음영 강조', h('div', {},
     h('p', { class: 'muted small' },

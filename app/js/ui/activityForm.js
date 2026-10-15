@@ -1,7 +1,7 @@
 // 일정 입력/수정 모달. 교사가 쓰면 '확인 대기', 관리자가 쓰면 바로 승인 가능.
 import { h, openModal, toast, confirmDialog } from '../lib/dom.js';
 import { CATEGORY, STATUS, newActivity, today, fmtK, parseYmd, range } from '../model.js';
-import { put, audit, currentUser, isAdmin } from '../store.js';
+import { put, audit, currentUser, isAdmin, canEditActs } from '../store.js';
 import { bellList, clashReasons } from '../conflict.js';
 import { hilitePicker } from './hilite.js';
 import { holidayOn } from '../lib/holidays.js';
@@ -61,7 +61,7 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
   let hl = a.hl || '';
   // field() 는 <label> 이라 안에 든 단추가 두 번 눌린다(레이블이 제 컨트롤로 클릭을 또 보낸다).
   // 색이 켜졌다 바로 꺼져 버려서, 여기서는 label 을 쓰지 않고 칸을 직접 짠다.
-  const hlBox = isAdmin()
+  const hlBox = canEditActs()
     ? h('div', { class: 'span2 field' },
       h('span', { class: 'field-label' }, '음영 강조'),
       hilitePicker(hl, (k) => { hl = k; }),
@@ -133,7 +133,7 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
           needsBus: busChk.checked,
           busNote: busChk.checked ? busNote.value.trim() : '',
           // 강조는 관리자만 고른다. 교사가 고친 것은 그대로 둔다.
-          hl: isAdmin() ? hl : (a.hl || ''),
+          hl: canEditActs() ? hl : (a.hl || ''),
         });
 
         if (isNew) {
@@ -149,6 +149,11 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
           // 관리자의 오기재 수정 이력
           a.history = (a.history || []).concat([{
             at: new Date().toISOString(), by: me.name, action: '수정',
+          }]);
+        } else if (canEditActs()) {
+          // 고칠 권한만 받은 분. 승인 상태는 손대지 않는다 — 그것은 관리자 몫이다.
+          a.history = (a.history || []).concat([{
+            at: new Date().toISOString(), by: me.name, action: '수정(위임)',
           }]);
         }
 
