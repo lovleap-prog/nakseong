@@ -297,6 +297,8 @@ export function expandRecurring(rules, from, to) {
         status: 'approved',       // 반복일정은 사전 승인된 상시 운영 활동
         source: 'recurring',
         isRecurring: true,
+        // 관리자가 인정해 둔 중복은 규칙 문서에 적혀 있다. 날짜별로 풀어낼 때도 들고 간다.
+        clashOk: r.clashOk || [],
         includeInNeis: r.includeInNeis !== false,
         // showInWeekly 는 옛 이름. 먼저 쓰던 자료가 그대로 읽히게 둘 다 본다.
         showInPlan: r.showInPlan !== false && r.showInWeekly !== false,

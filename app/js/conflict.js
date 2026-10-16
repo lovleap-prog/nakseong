@@ -168,8 +168,26 @@ const sameText = (a, b) => {
   return !!x && !!y && x === y;
 };
 
-/** 두 항목이 왜 겹치는지. 겹치지 않으면 빈 배열. */
-export function clashReasons(a, b) {
+// ── 중복 인정 ──────────────────────────────────
+// 같은 시간에 여러 활동이 함께 도는 날이 있다. 알뜰장터를 여는 것과 함께
+// 무브퀴즈를 하는 것처럼, 장소와 학년이 겹쳐도 그렇게 하기로 정한 것들이다.
+// 빨간 테두리는 '잘못 들어갔다' 는 뜻으로 읽혀서, 보는 선생님마다
+// 관리 선생님께 다시 물어보게 된다. 관리자가 한 번 인정해 두면 그 짝만 조용해진다.
+//
+// 표시는 둘 중 한쪽 문서에만 적는다. 양쪽에 적어 두면 한쪽만 지워졌을 때
+// 어느 쪽이 맞는지 알 수 없기 때문이다.
+
+/** 이 항목이 '겹쳐도 된다' 고 적어 둔 상대들 */
+export const clashOkIds = (it) => (Array.isArray(it && it.clashOk) ? it.clashOk : []);
+
+/** 이 짝의 중복을 관리자가 인정했는가. 한쪽에만 적혀 있어도 인정이다. */
+export function clashAcked(a, b) {
+  if (!a || !b) return false;
+  return clashOkIds(a).includes(b.id) || clashOkIds(b).includes(a.id);
+}
+
+/** 두 항목이 왜 겹치는지 — 인정 여부는 보지 않는다. 겹치지 않으면 빈 배열. */
+export function rawClashReasons(a, b) {
   // 두 항목이 서로 다른 시정으로 움직일 수 있다(수업공개 날의 이원화).
   const ra = timeRange(a.time, periodTable(bellFor(a)));
   const rb = timeRange(b.time, periodTable(bellFor(b)));
@@ -189,24 +207,41 @@ export function clashReasons(a, b) {
 }
 
 /**
- * 같은 날의 항목들에서 중복을 찾는다.
- * @returns Map(항목 id → [{ other, why }])
+ * 화면에 빨갛게 띄울 중복인가. 관리자가 인정해 둔 짝은 빈 배열이다.
+ * 일정 창·시간표·일일 화면이 모두 이것을 본다 — 한 곳에서 인정하면 어디서도 조용해진다.
  */
-export function findClashes(items) {
-  const out = new Map();
+export function clashReasons(a, b) {
+  return clashAcked(a, b) ? [] : rawClashReasons(a, b);
+}
+
+/**
+ * 같은 날의 항목들에서 중복을 찾는다.
+ *
+ * 인정한 것도 버리지 않고 따로 담아 둔다. 관리자가 나중에 '이건 아니었네' 할 때
+ * 되돌릴 곳이 없으면, 인정 단추를 한 번 누른 것이 되돌리지 못하는 일이 된다.
+ *
+ * @returns {{ open: Map, acked: Map }} 아직 그대로인 것 / 관리자가 인정한 것
+ */
+export function scanClashes(items) {
+  const open = new Map();
+  const acked = new Map();
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
-      const why = clashReasons(items[i], items[j]);
+      const why = rawClashReasons(items[i], items[j]);
       if (!why.length) continue;
+      const into = clashAcked(items[i], items[j]) ? acked : open;
       for (const [x, y] of [[i, j], [j, i]]) {
-        const list = out.get(items[x].id) || [];
+        const list = into.get(items[x].id) || [];
         list.push({ other: items[y], why });
-        out.set(items[x].id, list);
+        into.set(items[x].id, list);
       }
     }
   }
-  return out;
+  return { open, acked };
 }
+
+/** 아직 인정하지 않은 중복만. Map(항목 id → [{ other, why }]) */
+export function findClashes(items) { return scanClashes(items).open; }
 
 /** 중복 한 건을 사람이 읽는 문장으로 */
 export function clashLabel(hits) {

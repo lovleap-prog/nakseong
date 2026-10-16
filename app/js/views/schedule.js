@@ -4,11 +4,12 @@ import {
   CATEGORY, STATUS, WEEKDAY, fmtK, today, addDays, addMonths,
   weekStart, sundayStart, monthStart, monthEnd, range, parseYmd, isWeekend, ymd, occursOn,
 } from '../model.js';
-import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashesOn, timetableOn, isNoMeal, cleanDetail } from '../select.js';
+import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashScanOn, timetableOn, isNoMeal, cleanDetail } from '../select.js';
 import { clashLabel, bellList, defaultBell, bellById, dayBellId, bellFor, describeTime } from '../conflict.js';
 import { openActivityForm } from '../ui/activityForm.js';
 import { openHiliteMenu, hlClass } from '../ui/hilite.js';
 import { canDelete, deleteOrRequest, delTitle } from '../del.js';
+import { ackClash, unackClash, canAck } from '../clashok.js';
 import { openDayExport, openPeriodExport } from '../ui/exporter.js';
 import { loadConfig } from '../config.js';
 import { holidayOn } from '../lib/holidays.js';
@@ -40,7 +41,7 @@ export function statusBadge(a, { showAll = false } = {}) {
  * @param checkDate  이 날짜 기준으로 내 체크 상태를 반영한다(빈 값이면 체크 개념 없음)
  * @param showCheck  체크박스를 그릴지. 주간 화면은 상태만 반영하고 체크박스는 안 그린다.
  */
-export function activityCard(a, { compact = false, onChange, checkDate = '', showCheck = false, showStatus = false, clash = null, showDate = false, onOpen = null } = {}) {
+export function activityCard(a, { compact = false, onChange, checkDate = '', showCheck = false, showStatus = false, clash = null, ackable = false, showDate = false, onOpen = null } = {}) {
   const chips = [['대상', a.target], ['장소', a.place], ['담당', a.owner], ['계', a.dept]];
   // 고칠 권한을 받은 분(교무행정사)도 남의 것을 고친다. 장소가 틀린 것을 먼저 보는
   // 일이 잦은데, 그때마다 관리 선생님께 말씀드려 고치게 하면 하루가 간다.
@@ -70,7 +71,25 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
         a.needsBus ? h('span', { class: 'badge st-bus', title: a.busNote || '배차 필요' }, '\u{1F68C} 배차') : null,
         a.endDate ? h('span', { class: 'badge st-span' }, `~ ${fmtK(a.endDate, { year: false })}`) : null),
       labeledChips(chips),
-      clash ? h('p', { class: 'clash-note' }, '\u26A0 ', clashLabel(clash)) : null,
+      clash
+        ? h('p', { class: 'clash-note' }, '\u26A0 ', clashLabel(clash),
+          // 겹쳐도 되는 것이라고 관리자가 말해 주면 빨간 테두리를 거둔다.
+          // 두면 보는 선생님마다 '이거 잘못 들어간 것 아닙니까' 하고 다시 여쭤보게 된다.
+          ackable && canAck(a.id)
+            ? h('button', {
+              class: 'btn-ack', type: 'button',
+              title: '이 겹침은 그래도 된다고 표시합니다. 모두의 화면에서 빨간 테두리가 사라집니다.',
+              onClick: async (e) => {
+                e.stopPropagation();
+                try {
+                  await ackClash(a.id, clash.map((c) => c.other.id));
+                  toast(`'${a.title}' 의 중복을 인정했습니다. 되돌리는 것은 아래 [인정한 중복] 에서 합니다.`, 'ok');
+                  if (onChange) onChange();
+                } catch (err) { toast(err.message || '인정하지 못했습니다.', 'warn'); }
+              },
+            }, '중복 인정')
+            : null)
+        : null,
       // 비고는 좁은 칸에서도 보여준다. '1-5교시 · 6-5-3-4-6년 순' 처럼
       // 시간 표기만으로는 알 수 없는 내용이 여기 들어가기 때문이다.
       // '비급식일' 은 일정이 아니라 그 날의 성격이라 위쪽 띠 한 줄로 올린다.
@@ -262,11 +281,46 @@ function findById(id, acts, slots) {
 }
 
 /**
+ * 중복 목록의 한 줄. 관리자에게는 인정·해제 단추가 붙는다.
+ *
+ * 카드의 [중복 인정] 과 같은 일을 하지만, 여기서는 시간표 칸처럼 카드가 없는 것도
+ * 다룰 수 있다. 되돌리는 길도 여기 하나뿐이다.
+ */
+function clashRow(id, hits, items, slots, { rerender, acked = false } = {}) {
+  const me = findById(id, items, slots);
+  const name = me ? `${me.time || ''} ${me.title}`.trim() : id;
+  const others = hits.map((x) => x.other.id);
+  return h('li', {},
+    h('strong', {}, name),
+    ' — ', clashLabel(hits),
+    canAck(id)
+      ? h('button', {
+        class: 'btn-ack', type: 'button',
+        title: acked
+          ? '다시 중복으로 보아 빨간 테두리를 되살립니다.'
+          : '이 겹침은 그래도 된다고 표시합니다. 모두의 화면에서 빨간 테두리가 사라집니다.',
+        onClick: async () => {
+          try {
+            if (acked) {
+              await unackClash(id, others);
+              toast(`'${name}' 의 중복 인정을 풀었습니다.`, 'ok');
+            } else {
+              await ackClash(id, others);
+              toast(`'${name}' 의 중복을 인정했습니다.`, 'ok');
+            }
+            if (rerender) rerender();
+          } catch (err) { toast(err.message || '바꾸지 못했습니다.', 'warn'); }
+        },
+      }, acked ? '인정 해제' : '중복 인정')
+      : null);
+}
+
+/**
  * 반복일정 한 줄. 행사와 겹칠 때 '이 날만 제외' 할 수 있어야 한다.
  * 규칙 자체를 끄면 다른 주까지 사라지므로, 그 날짜만 예외로 넣는다.
  */
 function recurringRow(a, day, clash, onChange) {
-  const card = activityCard(a, { compact: true, checkDate: day, showCheck: true, clash });
+  const card = activityCard(a, { compact: true, checkDate: day, showCheck: true, clash, ackable: true, onChange });
   if (!isAdmin()) return card;
   const btn = h('button', {
     class: 'btn btn-sm btn-danger skip-btn',
@@ -497,7 +551,8 @@ export function renderDaily(ctx) {
   const rec = recurringOn(d);
   const after = afterSchoolFor(d);
   const slots = timetableOn(d);
-  const clash = clashesOn(d);
+  // open = 아직 그대로인 중복, acked = 관리자가 '겹쳐도 된다' 고 해 둔 것
+  const { open: clash, acked } = clashScanOn(d);
   const trips = tripsOn(d);
   const myMemos = memosOn(d);
   const rerender = () => ctx.refresh();
@@ -560,7 +615,7 @@ export function renderDaily(ctx) {
     })(),
 
     pending.length
-      ? section(`확인 대기 ${pending.length}건`, pending.map((a) => activityCard(a, { onChange: rerender, checkDate: d, clash: cl(a) })),
+      ? section(`확인 대기 ${pending.length}건`, pending.map((a) => activityCard(a, { onChange: rerender, checkDate: d, clash: cl(a), ackable: true })),
         isAdmin() ? h('button', { class: 'btn btn-sm', onClick: () => ctx.go('approvals') }, '승인함에서 처리') : null)
       : null,
 
@@ -593,19 +648,31 @@ export function renderDaily(ctx) {
         h('div', { class: 'chips' }, ...acad.map((a) => h('span', { class: 'acad-pill' }, a.title))));
     })(),
 
-    clash.size
-      ? h('section', { class: 'sec sec-clash' },
-        h('div', { class: 'sec-head' },
-          h('h3', {}, `중복 ${clash.size}건`),
-          h('span', { class: 'muted small' }, '겹쳐도 되는 것이면 그대로 두셔도 됩니다')),
-        h('ul', { class: 'clash-list' },
-          ...[...clash.entries()].map(([id, hits]) => {
-            const me = hits[0].other && findById(id, [...approved, ...pending, ...rec, ...spans], slots);
-            return h('li', {},
-              h('strong', {}, me ? `${me.time || ''} ${me.title}` : id),
-              ' — ', clashLabel(hits));
-          })))
-      : null,
+    (() => {
+      const showAcked = isAdmin() && acked.size;
+      if (!clash.size && !showAcked) return null;
+      const all = [...approved, ...pending, ...rec, ...spans];
+      // 둘을 한 덩이로 묶되 사이 간격은 다른 구역과 같아야 해서 .view 를 다시 쓴다.
+      return h('div', { class: 'view' },
+        clash.size
+          ? h('section', { class: 'sec sec-clash' },
+            h('div', { class: 'sec-head' },
+              h('h3', {}, `중복 ${clash.size}건`),
+              h('span', { class: 'muted small' }, '겹쳐도 되는 것이면 [중복 인정] 을 눌러 두세요')),
+            h('ul', { class: 'clash-list' },
+              ...[...clash.entries()].map(([id, hits]) =>
+                clashRow(id, hits, all, slots, { rerender }))))
+          : null,
+        // 인정해 둔 것은 관리자에게만, 그것도 접어서 보인다. 되돌릴 곳은 있어야 하지만
+        // 날마다 눈에 띌 일은 아니다 — 다른 선생님께는 아예 없는 것으로 보여야 한다.
+        showAcked
+          ? foldSection('daily-ackclash', `인정한 중복 ${acked.size}건`,
+            h('ul', { class: 'clash-list is-acked' },
+              ...[...acked.entries()].map(([id, hits]) =>
+                clashRow(id, hits, all, slots, { rerender, acked: true }))),
+            h('span', { class: 'muted small' }, '관리자에게만 보입니다'))
+          : null);
+    })(),
 
     spans.length
       ? h('section', { class: 'sec sec-span' },
@@ -614,7 +681,7 @@ export function renderDaily(ctx) {
         ...spans.map((a) => spanCard(a, d, rerender)))
       : null,
 
-    section('교육활동', approved.map((a) => activityCard(a, { onChange: rerender, checkDate: d, showCheck: true, clash: cl(a) })),
+    section('교육활동', approved.map((a) => activityCard(a, { onChange: rerender, checkDate: d, showCheck: true, clash: cl(a), ackable: true })),
       progressNode(d, [...spans, ...approved, ...rec], rerender)),
     section('상시·반복 운영', rec.map((a) => recurringRow(a, d, cl(a), rerender)),
       isAdmin() ? h('button', { class: 'btn btn-sm', onClick: () => ctx.go('recurring') }, '반복일정 관리') : null),

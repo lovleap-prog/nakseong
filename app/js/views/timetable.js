@@ -12,6 +12,7 @@ import { noticeBox } from './notice.js';
 import { holidayOn } from '../lib/holidays.js';
 import { list, put, putMany, remove, isAdmin, audit } from '../store.js';
 import { periodTable, clashReasons } from '../conflict.js';
+import { ackClash, canAck } from '../clashok.js';
 import { occupancyOn } from '../select.js';
 import { makeDraggable } from '../dragmove.js';
 
@@ -213,7 +214,7 @@ export function renderTimetable(ctx) {
           sel.size ? `${sel.size}칸 버리기` : '여기로 끌면 삭제'))
       : null,
 
-    clashTotal ? clashList(clash, slots, wk) : null);
+    clashTotal ? clashList(clash, slots, wk, refresh) : null);
 }
 
 /** 이 주가 비었을 때, 시간표가 들어 있는 가장 가까운 주를 알려준다. */
@@ -676,19 +677,36 @@ async function copyWeek(wk, offset, refresh) {
   refresh();
 }
 
-function clashList(clash, slots, wk) {
+function clashList(clash, slots, wk, refresh) {
   const rows = [];
   for (const [id, hits] of clash) {
     const s = slots.find((x) => x.id === id);
     if (!s) continue;
+    // 시간표 칸은 중복 판정에서 'tt_' 를 앞에 붙여 쓴다(교육활동 id 와 섞이지 않게).
+    const mine = `tt_${s.id}`;
     rows.push(h('li', {},
       h('strong', {}, `${WEEKDAY[s.dow]} ${s.period}교시 · ${s.title}`),
       ' — ',
-      hits.map((x) => `'${x.other.title}' (${x.why.join(', ')})`).join(', ')));
+      hits.map((x) => `'${x.other.title}' (${x.why.join(', ')})`).join(', '),
+      // 교담 시간표와 그 날 행사가 겹치는 것은 더러 그렇게 짜기로 한 것이다.
+      // 그때마다 빨간 칸을 두고 보면, 정말 어긋난 칸이 그 사이에 묻힌다.
+      canAck(mine)
+        ? h('button', {
+          class: 'btn-ack', type: 'button',
+          title: '이 겹침은 그래도 된다고 표시합니다. 모두의 화면에서 빨간 표시가 사라집니다.',
+          onClick: async () => {
+            try {
+              await ackClash(mine, hits.map((x) => x.other.id));
+              toast(`'${s.title}' 의 중복을 인정했습니다.`, 'ok');
+              if (refresh) refresh();
+            } catch (err) { toast(err.message || '인정하지 못했습니다.', 'warn'); }
+          },
+        }, '중복 인정')
+        : null));
   }
   return h('section', { class: 'sec sec-clash' },
     h('div', { class: 'sec-head' }, h('h3', {}, `중복 ${rows.length}건`),
-      h('span', { class: 'muted small' }, '겹쳐도 되는 것이면 그대로 두셔도 됩니다')),
+      h('span', { class: 'muted small' }, '겹쳐도 되는 것이면 [중복 인정] 을 눌러 두세요')),
     h('ul', { class: 'clash-list' }, ...rows));
 }
 

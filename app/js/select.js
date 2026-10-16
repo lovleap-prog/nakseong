@@ -1,7 +1,7 @@
 // 화면들이 공통으로 쓰는 조회 함수 모음
 import { list } from './store.js';
 import { expandRecurring, afterSchoolOn, occursOn, byTime, range, weekStart, dow } from './model.js';
-import { findClashes } from './conflict.js';
+import { scanClashes } from './conflict.js';
 import { holidayOn } from './lib/holidays.js';
 
 // '비급식일' 을 뜻하는 말들. 학교마다 적는 말이 조금씩 다르다.
@@ -124,9 +124,19 @@ export function occupancyOn(date) {
   return [...acts, ...recs, ...slots];
 }
 
-/** 그 날의 중복 목록. Map(id → [{other, why}]) */
+/** 그 날의 중복을 한 번에 — { open, acked } */
+export function clashScanOn(date) {
+  return scanClashes(occupancyOn(date));
+}
+
+/** 그 날의 중복 목록. Map(id → [{other, why}]) — 관리자가 인정한 것은 빠진다. */
 export function clashesOn(date) {
-  return findClashes(occupancyOn(date));
+  return clashScanOn(date).open;
+}
+
+/** 그 날 관리자가 '겹쳐도 된다' 고 해 둔 것들. 되돌리는 단추를 그리려고 쓴다. */
+export function ackedClashesOn(date) {
+  return clashScanOn(date).acked;
 }
 
 /** 그 날 중복이 몇 건인지(항목 수 기준) */

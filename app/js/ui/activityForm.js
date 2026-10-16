@@ -185,7 +185,10 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
       }
       // 겹침은 그 날 화면에서 빨갛게 뜨는 것과 같은 기준으로 본다(시간 + 담당·장소·학년).
       const cand = {
-        id: a.id, date, time: inp.time.value.trim(), bellId: bellSel.value,
+        // 관리자가 '겹쳐도 된다' 고 해 둔 짝은 여기서도 알리지 않는다.
+        // 인정해 놓고 고치러 들어왔는데 다시 경고가 뜨면 인정한 보람이 없다.
+        id: a.id, clashOk: a.clashOk || [],
+        date, time: inp.time.value.trim(), bellId: bellSel.value,
         place: inp.place.value.trim(), target: inp.target.value.trim(), owner: inp.owner.value.trim(),
       };
       if (cand.time) {

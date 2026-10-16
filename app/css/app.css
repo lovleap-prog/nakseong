@@ -622,6 +622,20 @@ body.dragging-now .band-grid { pointer-events: none; }
 .clash-list li { margin-bottom: 2px; }
 .card.is-clash { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--danger) 55%, transparent); }
 .clash-note { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--danger); }
+
+/* '겹쳐도 된다' 단추 — 경고 옆에 작게. 지우는 단추로 보이면 안 되므로 빨갛게 두지 않는다. */
+.btn-ack {
+  margin-left: 6px; padding: 1px 8px; font: inherit; font-size: 11.5px; font-weight: 700;
+  color: var(--muted); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 999px;
+  cursor: pointer; white-space: nowrap; vertical-align: baseline;
+}
+.btn-ack:hover { color: var(--text); border-color: var(--muted); }
+
+/* 인정해 둔 중복 — 더는 경고가 아니다. 회색으로 가라앉혀 둔다. */
+.clash-list.is-acked { color: var(--muted); }
+.clash-list.is-acked strong { font-weight: 600; }
+
 .skip-btn { white-space: nowrap; }
 
 @media (max-width: 640px) {
