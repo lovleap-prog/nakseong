@@ -17,7 +17,7 @@ export const COLLECTIONS = [
 
 let backend = null;
 // approved: 관리자가 명단에서 승인했는가. 로컬 저장에서는 늘 참이다(혼자 쓰는 것이므로).
-let user = { name: '', role: 'teacher', dept: '', email: '', uid: '', approved: true, canNotice: false };
+let user = { name: '', role: 'teacher', dept: '', email: '', uid: '', approved: true, canNotice: false, canEdit: false };
 
 export function currentUser() { return user; }
 export function setUser(u) {

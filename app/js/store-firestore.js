@@ -99,7 +99,11 @@ export async function createFirestoreBackend(cfg) {
           name: (d && d.name) || u.displayName || u.email || '',
           role: (d && d.role) || 'teacher',
           dept: (d && d.dept) || '',
+          // 권한은 명단 문서에만 있다. 여기서 옮겨 적지 않으면 관리자가 명단에서
+          // 켜 주어도 그분 화면에는 영영 닿지 않는다. 새 권한을 만들 때마다 이 줄에도
+          // 적어야 한다 — v56 에서 canEdit 를 빠뜨려 '권한을 줬는데 ✎ 가 안 뜬다' 가 됐다.
           canNotice: !!(d && d.canNotice),
+          canEdit: !!(d && d.canEdit),
           approved,
         });
         // 승인되면 그때 공용 자료를 구독한다. 승인 전에 구독하면 규칙에 막혀
@@ -121,7 +125,7 @@ export async function createFirestoreBackend(cfg) {
     } else {
       if (stopMe) { stopMe(); stopMe = null; }
       stopSharedWatch();
-      setUser({ uid: '', role: 'teacher', name: '', dept: '', email: '', approved: false, canNotice: false });
+      setUser({ uid: '', role: 'teacher', name: '', dept: '', email: '', approved: false, canNotice: false, canEdit: false });
       watchMine(null);
       emit('auth');
     }
