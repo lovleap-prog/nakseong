@@ -217,6 +217,11 @@ export function newPost(partial = {}) {
     by: '', uid: '',         // 쓴 사람 (이름 / 로그인 식별자)
     at: new Date().toISOString(),
     extendedTo: '',          // 마지막으로 연장한 날짜. 연장 이력 한 줄.
+    // 꾸미기 — 공지가 여럿 붙으면 다 같은 검은 글씨라 급한 것이 묻힌다.
+    // 글 안의 일부가 아니라 공지 한 장을 통째로 칠한다(HILITE 의 열쇠말).
+    bold: false,             // 굵게
+    fg: '',                  // 글자색
+    hl: '',                  // 바탕색
     ...partial,
   };
 }

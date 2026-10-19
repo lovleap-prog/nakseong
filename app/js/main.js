@@ -20,7 +20,7 @@ import { renderImporter } from './views/importer.js';
 import { renderSettings } from './views/settings.js';
 import { dayBundle, pendingList, myPendingCount, isNoMeal } from './select.js';
 import { todoList, todoCount, todoSnapshot, newlyAdded, TODO_LABEL } from './todo.js';
-import { postsIn } from './views/board.js';
+import { postsIn, postBodyClass, postInk } from './views/board.js';
 import { mySubs } from './views/subplan.js';
 import { isChecked, toggleCheck } from './checks.js';
 import { openDayExport } from './ui/exporter.js';
@@ -469,8 +469,8 @@ function renderWidget() {
       posts.length
         ? h('div', { class: 'widget-notice' },
           h('h4', {}, '\u{1F4E2} 공지 ', h('span', { class: 'sec-count' }, posts.length)),
-          h('ul', {}, ...posts.map((p) => h('li', {},
-            h('span', { class: 'wn-text' }, p.text || ''),
+          h('ul', {}, ...posts.map((p) => h('li', { class: postBodyClass(p).replace('post-body', 'wn-item') },
+            h('span', { class: 'wn-text' }, postInk(p)),
             p.by ? h('span', { class: 'wn-by' }, p.by) : null))))
         : null,
       items.length

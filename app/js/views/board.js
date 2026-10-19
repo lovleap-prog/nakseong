@@ -8,7 +8,8 @@
 // 교무행정사가 한다. 관리자가 명단에서 '공지 권한' 을 준 사람도 쓸 수 있다.
 import { h, toast, clear, confirmDialog, openModal } from '../lib/dom.js';
 import { list, put, remove, canPost, isAdmin, currentUser } from '../store.js';
-import { newPost, today, fmtK, addDays, parseYmd, ymd } from '../model.js';
+import { newPost, today, fmtK, addDays, parseYmd, ymd, hiliteOk } from '../model.js';
+import { hilitePicker } from '../ui/hilite.js';
 
 /**
  * 그 기간에 걸치는 공지.
@@ -114,6 +115,85 @@ export function boardBox(from, to, { title = '공지사항', refresh } = {}) {
   return box;
 }
 
+// ── 공지 꾸미기 ────────────────────────────────────────────
+// 공지가 여럿 붙으면 다 같은 검은 글씨라, 오늘 꼭 봐야 할 것이 묻힌다.
+// 글 안의 일부만 칠하게 하면 글자 고르기·서식 지우기까지 따라붙고 휴대전화에서는
+// 아예 고를 수가 없다. 그래서 일정의 음영 강조와 같이 **한 장을 통째로** 칠한다.
+//
+// 바탕색과 글자색이 같은 --hl 값을 쓰므로 한 칸에 둘 다 담을 수 없다.
+// 바깥(.post-body)이 바탕색을, 안쪽 <span>이 글자색을 맡는다.
+
+/** 공지 본문 칸의 클래스 — 굵게와 바탕색 */
+export const postBodyClass = (p) =>
+  `post-body${p && p.bold ? ' is-bold' : ''}${p && hiliteOk(p.hl) ? ` is-hl hl-${p.hl}` : ''}`;
+
+/** 본문 — 글자색이 있으면 그 색을 쓰는 칸으로 한 번 감싼다 */
+export function postInk(p) {
+  const t = (p && p.text) || '';
+  return p && hiliteOk(p.fg) ? h('span', { class: `post-ink hl-${p.fg}` }, t) : t;
+}
+
+/**
+ * 꾸미기 칸 — 굵게 · 글자색 · 바탕색.
+ * [공지 쓰기] 창과 카드의 🎨 메뉴가 같은 것을 쓴다. deco 를 그 자리에서 고친다.
+ *
+ * field() 처럼 <label> 로 감싸면 안에 든 색 단추가 두 번 눌린다(레이블이 제 컨트롤로
+ * 클릭을 또 보낸다). 색이 켜졌다 바로 꺼져 버리므로 여기서는 칸을 직접 짠다.
+ */
+export function decoFields(deco, onChange = () => {}) {
+  const boldChk = h('input', { type: 'checkbox', checked: !!deco.bold });
+  boldChk.addEventListener('change', () => { deco.bold = boldChk.checked; onChange(); });
+  const row = (label, node, hint) => h('div', { class: 'span2 field' },
+    h('span', { class: 'field-label' }, label), node,
+    hint ? h('span', { class: 'field-hint' }, hint) : null);
+  return [
+    h('div', { class: 'span2' }, h('label', { class: 'check' }, boldChk, '굵게')),
+    row('글자색', hilitePicker(deco.fg || '', (k) => { deco.fg = k; onChange(); },
+      { hints: false, noneTitle: '기본 글자색' }), '글씨 자체의 색입니다.'),
+    row('바탕색', hilitePicker(deco.hl || '', (k) => { deco.hl = k; onChange(); },
+      { noneTitle: '바탕색 없음' }), '공지 한 장에 바탕색이 깔립니다. 급한 것 하나에만 쓰세요.'),
+  ];
+}
+
+/** 고른 대로 바로 보여 주는 칸. 색을 고르고 창을 닫아야 아는 것이 아니라. */
+export function decoPreview(deco, text) {
+  const box = h('div', { class: 'post-list deco-preview' });
+  const draw = () => {
+    clear(box);
+    box.appendChild(h('article', { class: 'post' },
+      h('div', { class: postBodyClass(deco) }, postInk({ ...deco, text: text() || '(내용을 적으면 여기 보입니다)' }))));
+  };
+  draw();
+  return { box, draw };
+}
+
+/** 카드의 🎨 단추 — 창을 열지 않고 그 자리에서 꾸민다. */
+export function openPostDeco(p, onSaved) {
+  if (!canEdit(p)) return;
+  const deco = { bold: !!p.bold, fg: p.fg || '', hl: p.hl || '' };
+  const pv = decoPreview(deco, () => p.text);
+  const refresh = () => pv.draw();
+  return openModal('공지 꾸미기', h('div', { class: 'form-grid' },
+    ...decoFields(deco, refresh),
+    h('div', { class: 'span2 field' }, h('span', { class: 'field-label' }, '미리보기'), pv.box)), [
+    { label: '취소', onClick: (c) => c() },
+    {
+      label: '적용', class: 'btn-primary',
+      onClick: async (c) => {
+        try {
+          await put('board', { ...p, ...deco });
+          toast('꾸몄습니다. 모든 선생님 화면에 같이 보입니다.', 'ok');
+          c();
+          if (onSaved) onSaved();
+        } catch (e) {
+          console.error(e);
+          toast('바꾸지 못했습니다: ' + (e.message || ''), 'warn');
+        }
+      },
+    },
+  ]);
+}
+
 const firstLine = (t) => String(t || '').split('\n')[0].slice(0, 40);
 
 /**
@@ -153,7 +233,7 @@ function quickAdd(redraw) {
 function postCard(p, redraw) {
   const left = daysLeft(p);
   return h('article', { class: `post${p.pinned ? ' is-pinned' : ''}` },
-    h('div', { class: 'post-body' }, p.text || ''),
+    h('div', { class: postBodyClass(p) }, postInk(p)),
     h('div', { class: 'post-foot' },
       h('span', { class: `post-range${p.always ? ' is-always' : ''}` }, rangeLabel(p)),
       left >= 0 && left <= 2
@@ -166,6 +246,13 @@ function postCard(p, redraw) {
             class: `icon-btn${p.pinned ? ' on' : ''}`, title: p.pinned ? '고정 풀기' : '맨 위에 고정',
             onClick: async () => { await put('board', { ...p, pinned: !p.pinned }); redraw(); },
           }, '\u{1F4CC}'),
+          // 꾸미기는 창을 열지 않고 그 자리에서. 여러 건을 훑으며 칠하는 일이라서다.
+          // 늘 쓰던 ✎ 는 자리를 지킨다 — 손이 기억하는 자리를 옮기면 잘못 누른다.
+          h('button', {
+            class: `icon-btn hl-btn${(p.bold || p.fg || p.hl) ? ' on' : ''}`,
+            title: '굵기 · 글자색 · 바탕색',
+            onClick: () => openPostDeco(p, redraw),
+          }, '\u{1F3A8}'),
           h('button', { class: 'icon-btn', title: '고치기', onClick: () => openPostForm(p, null, redraw) }, '✎'),
           h('button', {
             class: 'icon-btn danger', title: '내리기',
@@ -221,6 +308,11 @@ export function openPostForm(post, defaults, onSaved) {
   always.addEventListener('change', syncMode);
   setTimeout(syncMode, 0);
 
+  // 꾸미기 — 쓰면서 바로 고른다. 올리고 나서 다시 🎨 를 눌러야 한다면 안 쓰게 된다.
+  const deco = { bold: !!base.bold, fg: base.fg || '', hl: base.hl || '' };
+  const pv = decoPreview(deco, () => text.value.trim());
+  text.addEventListener('input', () => pv.draw());
+
   openModal(post ? '공지 고치기' : '공지 쓰기', h('div', { class: 'form-grid' },
     h('div', { class: 'span2' },
       h('label', { class: 'field' }, h('span', { class: 'field-label' }, '내용 *'), text)),
@@ -228,6 +320,8 @@ export function openPostForm(post, defaults, onSaved) {
       h('label', { class: 'check' }, always,
         '기간 없이 계속 붙여두기 (자유 메모)')),
     dateBox,
+    ...decoFields(deco, () => pv.draw()),
+    h('div', { class: 'span2 field' }, h('span', { class: 'field-label' }, '미리보기'), pv.box),
     h('p', { class: 'span2 muted small' },
       '정한 기간에 걸치는 날이면 ', h('b', {}, '일일·주간 화면 모두'), ' 에 뜹니다. ',
       '기간이 지나면 저절로 내려가고, 더 붙여둘지 다시 물어봅니다. ',
@@ -243,7 +337,7 @@ export function openPostForm(post, defaults, onSaved) {
         const end = to.value && to.value >= from.value ? to.value : from.value;
         try {
           await put('board', {
-            ...base, text: t, always: keep,
+            ...base, ...deco, text: t, always: keep,
             from: keep ? (base.from || today()) : from.value,
             to: keep ? '' : end,
             by: base.by || me.name, uid: base.uid || me.uid || '',

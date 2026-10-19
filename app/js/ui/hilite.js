@@ -10,8 +10,10 @@ import { put, audit, canEditActs } from '../store.js';
 /**
  * 색 단추 줄. 고르면 onPick(key) 를 부른다. 다시 고르면 꺼진다.
  * @param {string} value  지금 값 ('' 이면 강조 없음)
+ * @param {object} opt    hints — 설명말('꼭 챙길 것')을 붙일지. 글자색 고를 때는 뜻이 없다.
+ *                        noneTitle — '없음' 단추에 붙일 설명말
  */
-export function hilitePicker(value, onPick) {
+export function hilitePicker(value, onPick, { hints = true, noneTitle = '강조 없음' } = {}) {
   let cur = hiliteOk(value) ? value : '';
   const row = h('div', { class: 'hl-row', role: 'group', 'aria-label': '음영 강조 색' });
 
@@ -19,12 +21,12 @@ export function hilitePicker(value, onPick) {
     row.replaceChildren(
       h('button', {
         type: 'button', class: `hl-swatch hl-none${cur === '' ? ' on' : ''}`,
-        title: '강조 없음', 'aria-pressed': String(cur === ''),
+        title: noneTitle, 'aria-pressed': String(cur === ''),
         onClick: () => { cur = ''; draw(); onPick(''); },
       }, '✖'),
       ...Object.entries(HILITE).map(([k, v]) => h('button', {
         type: 'button', class: `hl-swatch hl-${k}${cur === k ? ' on' : ''}`,
-        title: `${v.label} — ${v.hint}`, 'aria-pressed': String(cur === k),
+        title: hints ? `${v.label} — ${v.hint}` : v.label, 'aria-pressed': String(cur === k),
         onClick: () => { cur = cur === k ? '' : k; draw(); onPick(cur); },
       }, v.label)));
   };

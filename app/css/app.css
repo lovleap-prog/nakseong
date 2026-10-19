@@ -1207,6 +1207,22 @@ body.dragging-now .band-grid { pointer-events: none; }
 }
 .post.is-pinned { border-left-color: var(--warn); background: var(--warn-bg); }
 .post-body { white-space: pre-wrap; line-height: 1.55; }
+
+/* 공지 꾸미기 — 굵게 · 글자색 · 바탕색.
+   바탕색과 글자색이 같은 --hl 을 쓰므로 바깥이 바탕, 안쪽 .post-ink 가 글자를 맡는다.
+   바탕색은 옅게 깐다. 공지는 여러 줄이라 진하게 깔면 글씨가 안 읽힌다. */
+.post-body.is-bold { font-weight: 700; }
+.post-body.is-hl {
+  background: color-mix(in srgb, var(--hl) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hl) 35%, transparent);
+  border-radius: 6px; padding: 7px 9px; margin: -2px -3px 0;
+}
+.post-ink { color: var(--hl); }
+.deco-preview .post { pointer-events: none; }
+
+/* 위젯에서도 같이 보인다. 하루 내내 띄워 두는 창이라 오히려 여기서 봐야 한다. */
+.wn-item.is-bold { font-weight: 700; }
+.wn-item.is-hl { background: color-mix(in srgb, var(--hl) 16%, transparent); border-radius: 6px; padding-left: 5px; padding-right: 5px; }
 .post-foot {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line);
