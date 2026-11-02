@@ -105,7 +105,25 @@ export function describeTime(item) {
   return r ? `${t} (${fmtMin(r.s)}~${fmtMin(r.e)})` : t;
 }
 
-const DEFAULT_LEN = 40;   // 시각만 적혀 있을 때 이만큼 쓰는 것으로 본다
+const DEFAULT_LEN = 40;   // 시각만 적혀 있을 때 길어야 이만큼 쓰는 것으로 본다
+
+/**
+ * s 다음에 오는 가장 가까운 교시 경계(시작이든 끝이든). 없으면 null.
+ *
+ * 시작 시각만 적힌 일정이 얼마나 가는지는 알 수 없다. 여태 무조건 40분으로 보았는데,
+ * 그러면 쉬는 시간에 드는 일정이 다음 교시로 넘쳐 든다. '10:30 중간놀이' 가
+ * 10:30~11:10 이 되어, 11시에 시작하는 3교시와 겹친다고 떴다. 중간놀이는
+ * 쉬는 시간에 하는 것이고 학교는 그 시간을 시정표에 적어 두었는데도 그랬다.
+ *
+ * 모르는 길이를 넘겨짚어 남의 교시까지 밀고 들어가지 않는다. 다음 경계에서 끊는다.
+ */
+function nextEdge(min, table) {
+  let best = null;
+  for (const p of table) {
+    for (const x of [p.s, p.e]) if (x > min && (best === null || x < best)) best = x;
+  }
+  return best;
+}
 
 /**
  * '3교시', '1~2교시', '10:30', '08:40~09:00', '아침활동' → { s, e } (분)
@@ -121,7 +139,12 @@ export function timeRange(text, periods) {
   if (m) return { s: toMin(`${m[1]}:${m[2]}`), e: toMin(`${m[3]}:${m[4]}`) };
 
   m = t.match(/(\d{1,2})\s*:\s*(\d{2})/);
-  if (m) { const s = toMin(`${m[1]}:${m[2]}`); return { s, e: s + DEFAULT_LEN }; }
+  if (m) {
+    // 끝 시각이 없다. 길어야 40분, 그리고 다음 교시 경계를 넘지 않는다.
+    const s = toMin(`${m[1]}:${m[2]}`);
+    const edge = nextEdge(s, table);
+    return { s, e: edge === null ? s + DEFAULT_LEN : Math.min(s + DEFAULT_LEN, edge) };
+  }
 
   m = t.match(/(\d)\s*[~-]\s*(\d)\s*교시/);
   if (m) {
@@ -153,6 +176,16 @@ export function gradeSet(text) {
   if (!t) return null;
   if (/전교생|전학년|모든학년/.test(t)) return new Set([1, 2, 3, 4, 5, 6]);
   const out = new Set();
+
+  // '6-5-3-4-6학년' 은 순회 차례지 범위가 아니다. 1교시 6학년, 2교시 5학년 …
+  // 이렇게 돈다는 뜻인데, 끝의 '4-6' 만 보고 '4~6학년' 으로 읽어 3학년을 놓쳤다.
+  // 셋 이상이 이어져 있으면 차례로 보고 적힌 학년을 그대로 담는다.
+  const chain = t.match(/\d(?:[~\-,·]\d){2,}\s*학?년/);
+  if (chain) {
+    for (const d of chain[0].match(/\d/g)) out.add(Number(d));
+    return out;
+  }
+
   let m = t.match(/(\d)[~-](\d)\s*학?년/);
   if (m) { for (let i = Number(m[1]); i <= Number(m[2]); i++) out.add(i); }
   for (const g of t.matchAll(/(\d)\s*(?:,\s*(\d)\s*)?학?년/g)) {
@@ -180,29 +213,94 @@ const sameText = (a, b) => {
 /** 이 항목이 '겹쳐도 된다' 고 적어 둔 상대들 */
 export const clashOkIds = (it) => (Array.isArray(it && it.clashOk) ? it.clashOk : []);
 
-/** 이 짝의 중복을 관리자가 인정했는가. 한쪽에만 적혀 있어도 인정이다. */
+/**
+ * 인정을 적어 둘 때 쓰는 '변하지 않는 이름'.
+ *
+ * 문서 id 로 적어 두면 한 번 인정한 것이 되살아난다.
+ *   시간표 칸  [지난 주 복사]·[이 주에 깔기] 를 할 때마다 문서가 새로 생겨 id 가 바뀐다
+ *   반복일정    날마다 새로 펼치므로 id 에 날짜가 붙는다 (rec_12@2026-11-03)
+ * 그래서 매주, 날마다 같은 것을 다시 인정해야 했다. 요일·교시·제목처럼 복사해도
+ * 그대로인 것으로 적는다. 교육활동은 문서가 하나뿐이라 id 를 그대로 쓴다.
+ */
+export function clashKey(it) {
+  if (!it) return '';
+  const id = String(it.id || '');
+  if (id.startsWith('tt_')) {
+    return `tt#${it.dow}-${it.period}-${String(it.title || '').replace(/\s/g, '')}`;
+  }
+  if (it.recurringId) return `rec#${it.recurringId}`;
+  return id;
+}
+
+/**
+ * 이 짝의 중복을 관리자가 인정했는가. 한쪽에만 적혀 있어도 인정이다.
+ * 예전에 문서 id 로 적어 둔 것도 그대로 읽는다 — 이미 인정해 둔 것이 풀리면 안 된다.
+ */
 export function clashAcked(a, b) {
   if (!a || !b) return false;
-  return clashOkIds(a).includes(b.id) || clashOkIds(b).includes(a.id);
+  const ka = [a.id, clashKey(a)];
+  const kb = [b.id, clashKey(b)];
+  return clashOkIds(a).some((x) => kb.includes(x)) || clashOkIds(b).some((x) => ka.includes(x));
+}
+
+/**
+ * 그 항목이 '언제 어느 학년을 데리고 있는지' 를 토막으로 끊어 돌려준다.
+ *
+ * 원어민 순회처럼 한 시간에 한 학년씩 돌아가는 수업이 있다. 학교는 그것을
+ * '1-5교시 / 6-5-3-4-6학년' 이라고 적는다 — 1교시 6학년, 2교시 5학년, 3교시
+ * 3학년 … 이렇게 돈다는 뜻이다. 여태 이것을 '4~6학년이 다섯 교시 내내' 로 읽어서,
+ * 1교시 과학5(5학년)처럼 아무 상관 없는 칸까지 겹친다고 떴다.
+ *
+ * 교시 수와 학년 수가 맞아떨어질 때만 순회로 본다. 아니면 여느 때처럼 한 토막이다.
+ */
+function legsOf(item, table) {
+  const r = timeRange(item.time, table);
+  if (!r) return [];
+  const span = String(item.time || '').match(/(\d)\s*[~-]\s*(\d)\s*교시/);
+  const chain = String(item.target || '').replace(/\s/g, '').match(/\d(?:[~\-,·]\d){2,}\s*학?년/);
+  if (span && chain) {
+    const from = Number(span[1]);
+    const to = Number(span[2]);
+    const grades = chain[0].match(/\d/g).map(Number);
+    if (to >= from && grades.length === to - from + 1) {
+      const legs = [];
+      for (let i = 0; i < grades.length; i++) {
+        const p = table[from - 1 + i];
+        if (p) legs.push({ s: p.s, e: p.e, grades: new Set([grades[i]]) });
+      }
+      if (legs.length) return legs;
+    }
+  }
+  return [{ s: r.s, e: r.e, grades: gradeSet(item.target) }];
+}
+
+/** 같은 시간에 함께 있는 학년. 순회는 교시별로 따진다. */
+function sharedGrades(a, b, ta, tb) {
+  const out = new Set();
+  for (const la of legsOf(a, ta)) {
+    for (const lb of legsOf(b, tb)) {
+      if (!overlapsTime(la, lb) || !la.grades || !lb.grades) continue;
+      for (const g of la.grades) if (lb.grades.has(g)) out.add(g);
+    }
+  }
+  return [...out].sort((x, y) => x - y);
 }
 
 /** 두 항목이 왜 겹치는지 — 인정 여부는 보지 않는다. 겹치지 않으면 빈 배열. */
 export function rawClashReasons(a, b) {
   // 두 항목이 서로 다른 시정으로 움직일 수 있다(수업공개 날의 이원화).
-  const ra = timeRange(a.time, periodTable(bellFor(a)));
-  const rb = timeRange(b.time, periodTable(bellFor(b)));
+  const ta = periodTable(bellFor(a));
+  const tb = periodTable(bellFor(b));
+  const ra = timeRange(a.time, ta);
+  const rb = timeRange(b.time, tb);
   if (!overlapsTime(ra, rb)) return [];
 
   const why = [];
   if (sameText(a.owner, b.owner)) why.push(`담당 ${a.owner}`);
   if (sameText(a.place, b.place)) why.push(`장소 ${a.place}`);
 
-  const ga = gradeSet(a.target);
-  const gb = gradeSet(b.target);
-  if (ga && gb) {
-    const both = [...ga].filter((g) => gb.has(g));
-    if (both.length) why.push(`${both.join('·')}학년`);
-  }
+  const both = sharedGrades(a, b, ta, tb);
+  if (both.length) why.push(`${both.join('·')}학년`);
   return why;
 }
 

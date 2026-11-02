@@ -8,7 +8,7 @@
 // 표시는 짝(둘) 단위다. 한 항목을 통째로 '중복 안 봄' 으로 두면, 정말 어긋난 일정이
 // 나중에 그 자리에 들어와도 조용히 넘어가 버린다.
 import { list, get, put, audit, isAdmin } from './store.js';
-import { clashOkIds } from './conflict.js';
+import { clashOkIds, clashKey } from './conflict.js';
 
 /**
  * 이 id 를 가진 것이 어느 문서인가.
@@ -37,8 +37,10 @@ function docOf(id) {
   return doc ? { col, doc } : null;
 }
 
-/** 인정 표시를 적을 수 있는 항목인가(문서가 남아 있는가). */
-export const canAck = (id) => isAdmin() && !!docOf(id);
+/** 인정 표시를 적을 수 있는 항목인가(문서가 남아 있는가). 항목이든 id 든 받는다. */
+export const canAck = (x) => isAdmin() && !!docOf(idOf(x));
+
+const idOf = (x) => String((x && typeof x === 'object' ? x.id : x) || '');
 
 /**
  * 중복 인정 — 이 항목이 지금 겹치고 있는 상대들을 '그래도 된다' 고 적는다.
@@ -46,13 +48,16 @@ export const canAck = (id) => isAdmin() && !!docOf(id);
  * 상대 쪽 문서는 건드리지 않는다. 판정은 양쪽을 다 보므로 한 곳에 적으면 충분하고,
  * 둘 다 적어 두면 나중에 한쪽만 지워졌을 때 어느 쪽이 맞는지 알 수 없게 된다.
  *
- * @param {string} id        인정 단추를 누른 항목의 id
- * @param {string[]} others  그 항목이 겹치고 있는 상대들의 id
+ * 적을 때는 문서 id 가 아니라 clashKey 를 쓴다. 시간표를 다음 주에 복사하면 칸
+ * 문서가 새로 생기는데, id 로 적어 두면 그때 인정이 풀려 매주 다시 눌러야 했다.
+ *
+ * @param {object} item     인정 단추를 누른 항목 (중복 판정이 보는 그대로)
+ * @param {object[]} others 그 항목이 겹치고 있는 상대들
  */
-export async function ackClash(id, others) {
-  const t = docOf(id);
+export async function ackClash(item, others) {
+  const t = docOf(idOf(item));
   if (!t) throw new Error('이 항목을 찾을 수 없습니다. 화면을 새로 고쳐 주세요.');
-  const add = (others || []).filter(Boolean);
+  const add = (others || []).filter(Boolean).map(clashKey).filter(Boolean);
   const next = { ...t.doc, clashOk: [...new Set([...clashOkIds(t.doc), ...add])] };
   if (next.clashOk.length === clashOkIds(t.doc).length) return t.doc;
   await put(t.col, next);
@@ -63,13 +68,17 @@ export async function ackClash(id, others) {
 /**
  * 인정 되돌리기 — 다시 빨갛게 뜨게 한다.
  * 표시가 어느 쪽에 적혀 있는지 모르므로 양쪽에서 지운다.
+ * 예전에 문서 id 로 적어 둔 것도 함께 지운다.
  */
-export async function unackClash(id, others) {
-  const drop = new Set((others || []).filter(Boolean));
-  for (const [mine, theirs] of [[id, drop], ...[...drop].map((o) => [o, new Set([id])])]) {
-    const t = docOf(mine);
+export async function unackClash(item, others) {
+  const list2 = (others || []).filter(Boolean);
+  const mineKeys = new Set([idOf(item), clashKey(item)].filter(Boolean));
+  const theirKeys = new Set(list2.flatMap((o) => [idOf(o), clashKey(o)]).filter(Boolean));
+
+  for (const [who, drop] of [[item, theirKeys], ...list2.map((o) => [o, mineKeys])]) {
+    const t = docOf(idOf(who));
     if (!t) continue;
-    const kept = clashOkIds(t.doc).filter((x) => !theirs.has(x));
+    const kept = clashOkIds(t.doc).filter((x) => !drop.has(x));
     if (kept.length === clashOkIds(t.doc).length) continue;
     const next = { ...t.doc, clashOk: kept };
     await put(t.col, next);

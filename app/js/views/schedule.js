@@ -4,7 +4,7 @@ import {
   CATEGORY, STATUS, WEEKDAY, fmtK, today, addDays, addMonths,
   weekStart, sundayStart, monthStart, monthEnd, range, parseYmd, isWeekend, ymd, occursOn,
 } from '../model.js';
-import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashScanOn, timetableOn, isNoMeal, cleanDetail } from '../select.js';
+import { activitiesOn, recurringOn, afterSchoolFor, dayBundle, clashScanOn, occupancyOn, timetableOn, isNoMeal, cleanDetail } from '../select.js';
 import { clashLabel, bellList, defaultBell, bellById, dayBellId, bellFor, describeTime } from '../conflict.js';
 import { openActivityForm } from '../ui/activityForm.js';
 import { openHiliteMenu, hlClass } from '../ui/hilite.js';
@@ -82,7 +82,7 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
               onClick: async (e) => {
                 e.stopPropagation();
                 try {
-                  await ackClash(a.id, clash.map((c) => c.other.id));
+                  await ackClash(a, clash.map((c) => c.other));
                   toast(`'${a.title}' 의 중복을 인정했습니다. 되돌리는 것은 아래 [인정한 중복] 에서 합니다.`, 'ok');
                   if (onChange) onChange();
                 } catch (err) { toast(err.message || '인정하지 못했습니다.', 'warn'); }
@@ -272,28 +272,22 @@ function dayBellPicker(day, onChange) {
   return sel;
 }
 
-/** 중복 목록에서 그 항목을 되찾는다. */
-function findById(id, acts, slots) {
-  const a = acts.find((x) => x.id === id);
-  if (a) return a;
-  const s = (slots || []).find((x) => `tt_${x.id}` === id);
-  return s ? { ...s, time: `${s.period}교시` } : null;
-}
-
 /**
  * 중복 목록의 한 줄. 관리자에게는 인정·해제 단추가 붙는다.
  *
  * 카드의 [중복 인정] 과 같은 일을 하지만, 여기서는 시간표 칸처럼 카드가 없는 것도
  * 다룰 수 있다. 되돌리는 길도 여기 하나뿐이다.
  */
-function clashRow(id, hits, items, slots, { rerender, acked = false } = {}) {
-  const me = findById(id, items, slots);
+function clashRow(id, hits, occ, { rerender, acked = false } = {}) {
+  // 중복 판정이 보는 목록(occupancyOn)에서 그대로 꺼낸다. 시간표 칸은 그 안에서만
+  // 'tt_' 가 붙은 꼴이라, 따로 짜 맞추면 인정을 적을 때 이름이 어긋난다.
+  const me = occ.find((x) => x.id === id);
   const name = me ? `${me.time || ''} ${me.title}`.trim() : id;
-  const others = hits.map((x) => x.other.id);
+  const others = hits.map((x) => x.other);
   return h('li', {},
     h('strong', {}, name),
     ' — ', clashLabel(hits),
-    canAck(id)
+    me && canAck(me)
       ? h('button', {
         class: 'btn-ack', type: 'button',
         title: acked
@@ -302,10 +296,10 @@ function clashRow(id, hits, items, slots, { rerender, acked = false } = {}) {
         onClick: async () => {
           try {
             if (acked) {
-              await unackClash(id, others);
+              await unackClash(me, others);
               toast(`'${name}' 의 중복 인정을 풀었습니다.`, 'ok');
             } else {
-              await ackClash(id, others);
+              await ackClash(me, others);
               toast(`'${name}' 의 중복을 인정했습니다.`, 'ok');
             }
             if (rerender) rerender();
@@ -553,6 +547,7 @@ export function renderDaily(ctx) {
   const slots = timetableOn(d);
   // open = 아직 그대로인 중복, acked = 관리자가 '겹쳐도 된다' 고 해 둔 것
   const { open: clash, acked } = clashScanOn(d);
+  const occ = occupancyOn(d);   // 중복 목록에서 항목을 되찾을 때 쓴다
   const trips = tripsOn(d);
   const myMemos = memosOn(d);
   const rerender = () => ctx.refresh();
@@ -651,7 +646,6 @@ export function renderDaily(ctx) {
     (() => {
       const showAcked = isAdmin() && acked.size;
       if (!clash.size && !showAcked) return null;
-      const all = [...approved, ...pending, ...rec, ...spans];
       // 둘을 한 덩이로 묶되 사이 간격은 다른 구역과 같아야 해서 .view 를 다시 쓴다.
       return h('div', { class: 'view' },
         clash.size
@@ -661,7 +655,7 @@ export function renderDaily(ctx) {
               h('span', { class: 'muted small' }, '겹쳐도 되는 것이면 [중복 인정] 을 눌러 두세요')),
             h('ul', { class: 'clash-list' },
               ...[...clash.entries()].map(([id, hits]) =>
-                clashRow(id, hits, all, slots, { rerender }))))
+                clashRow(id, hits, occ, { rerender }))))
           : null,
         // 인정해 둔 것은 관리자에게만, 그것도 접어서 보인다. 되돌릴 곳은 있어야 하지만
         // 날마다 눈에 띌 일은 아니다 — 다른 선생님께는 아예 없는 것으로 보여야 한다.
@@ -669,7 +663,7 @@ export function renderDaily(ctx) {
           ? foldSection('daily-ackclash', `인정한 중복 ${acked.size}건`,
             h('ul', { class: 'clash-list is-acked' },
               ...[...acked.entries()].map(([id, hits]) =>
-                clashRow(id, hits, all, slots, { rerender, acked: true }))),
+                clashRow(id, hits, occ, { rerender, acked: true }))),
             h('span', { class: 'muted small' }, '관리자에게만 보입니다'))
           : null);
     })(),

@@ -696,7 +696,7 @@ function clashList(clash, slots, wk, refresh) {
           title: '이 겹침은 그래도 된다고 표시합니다. 모두의 화면에서 빨간 표시가 사라집니다.',
           onClick: async () => {
             try {
-              await ackClash(mine, hits.map((x) => x.other.id));
+              await ackClash({ ...s, id: mine, time: `${s.period}교시` }, hits.map((x) => x.other));
               toast(`'${s.title}' 의 중복을 인정했습니다.`, 'ok');
               if (refresh) refresh();
             } catch (err) { toast(err.message || '인정하지 못했습니다.', 'warn'); }
