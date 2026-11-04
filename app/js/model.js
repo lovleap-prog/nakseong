@@ -160,6 +160,9 @@ export function newLesson(partial = {}) {
     id: uid('lsn'),
     title: '', owner: '', dept: '',
     category: '',        // 고쳐서 등록한 분류. 다음에 같은 활동이 오면 이대로 잡는다.
+    // 같은 행사는 장소와 대상이 해마다 같다. '독도교육 무브퀴즈' 는 늘 백이관에서
+    // 전교생이 한다. 그것을 달마다 다시 치고 계셨다.
+    place: '', target: '',
     count: 1,
     source: '',
     ...partial,

@@ -85,8 +85,12 @@ export function matchSources() {
   const staff = list('staff').filter((s) => s.active !== false && s.name);
   const lessons = list('lessons').filter((l) => l.title && (l.owner || l.dept));
   const fromActivities = list('activities')
-    .filter((a) => a.title && (a.owner || a.dept || a.category) && a.status === 'approved')
-    .map((a) => ({ title: a.title, owner: a.owner, dept: a.dept, category: a.category, count: 1, source: '등록된 일정' }));
+    .filter((a) => a.title && (a.owner || a.dept || a.category || a.place || a.target)
+      && a.status === 'approved')
+    .map((a) => ({
+      title: a.title, owner: a.owner, dept: a.dept, category: a.category,
+      place: a.place, target: a.target, count: 1, source: '등록된 일정',
+    }));
   return { staff, lessons: lessons.concat(fromActivities) };
 }
 
@@ -175,11 +179,24 @@ export function suggestOwner(activity, sources = matchSources()) {
  * 확신이 낮으면 직접 채우지 않고 '제안' 으로만 남긴다.
  * 엉뚱한 이름이 채워져 있는 것보다 비어 있는 편이 낫고, 제안은 눌러서 넣을 수 있다.
  */
+/**
+ * 빈 칸을 배운 대로 채운다 — 담당·부서·분류, 그리고 장소·대상.
+ * @returns {{filled, hinted, recalled}} 채운 담당자 / 제안만 한 것 / 장소·대상을 되살린 줄
+ */
 export function fillOwners(rows, { overwrite = false } = {}) {
   const sources = matchSources();
   let filled = 0;
   let hinted = 0;
+  let recalled = 0;
   for (const r of rows) {
+    // 장소·대상도 배운 대로 되살린다. 비어 있을 때만 — 적혀 온 것을 덮지 않는다.
+    const back = recallFields(r.title, sources);
+    if (back) {
+      let any = false;
+      if (!r.place && back.place) { r.place = back.place; any = true; }
+      if (!r.target && back.target) { r.target = back.target; any = true; }
+      if (any) { r._recalled = back; recalled++; }
+    }
     // 분류도 배운 대로 잡아준다. 사람이 이미 고쳐 둔 줄은 건드리지 않는다.
     if (!r._catTouched) {
       const cat = suggestCategory(r.title, sources);
@@ -200,7 +217,7 @@ export function fillOwners(rows, { overwrite = false } = {}) {
       hinted++;
     }
   }
-  return { filled, hinted };
+  return { filled, hinted, recalled };
 }
 
 /**
@@ -225,6 +242,32 @@ export function suggestCategory(title, sources = matchSources()) {
   return { category: ranked[0][0], score: Math.round(ranked[0][1] * 100) / 100 };
 }
 
+/** 띄어쓰기·괄호가 들쭉날쭉해도 같은 행사로 보기 위한 납작한 이름 */
+const flatTitle = (t) => String(t || '').replace(/[^가-힣A-Za-z0-9]+/g, '');
+
+/**
+ * 같은 행사를 전에 어떻게 적었는지 되살린다 — 장소와 대상.
+ *
+ * '독도교육 무브퀴즈' 는 늘 백이관에서 전교생이 한다. 그런데 월중계획을 붙여넣으면
+ * 그 두 칸이 늘 비어 있어, 달마다 같은 것을 다시 치고 계셨다.
+ *
+ * 담당자와 달리 **이름이 똑같을 때만** 되살린다. 담당자는 '소방' 같은 낱말만 걸려도
+ * 짐작할 거리가 되지만, 장소는 비슷한 이름의 다른 행사에서 끌어오면 그냥 틀린 값이
+ * 들어간다. 틀린 값이 채워져 있는 것보다 비어 있는 편이 낫다.
+ */
+export function recallFields(title, sources = matchSources()) {
+  const key = flatTitle(title);
+  if (key.length < 2) return null;
+  let best = null;
+  for (const l of sources.lessons) {
+    if (flatTitle(l.title) !== key) continue;
+    if (!l.place && !l.target) continue;
+    const w = (l.count || 1) * (l.source === FIXED_SOURCE ? 2 : 1);
+    if (!best || w > best.w) best = { w, place: l.place || '', target: l.target || '', from: l.source || '' };
+  }
+  return best;
+}
+
 /** 과거 계획에서 뽑은 (활동명, 담당자) 쌍을 사례로 쌓는다. 같은 쌍은 횟수만 올린다. */
 export function mergeLessons(existing, pairs, source = '') {
   const byKey = new Map();
@@ -237,16 +280,21 @@ export function mergeLessons(existing, pairs, source = '') {
     const owner = String(p.owner || '').trim();
     const dept = String(p.dept || '').trim();
     const category = String(p.category || '').trim();
-    // 분류만 고친 것도 배울 거리다. 담당자가 비어 있어도 기억한다.
-    if (!title || (!owner && !dept && !category)) continue;
+    const place = String(p.place || '').trim();
+    const target = String(p.target || '').trim();
+    // 분류·장소·대상만 고친 것도 배울 거리다. 담당자가 비어 있어도 기억한다.
+    if (!title || (!owner && !dept && !category && !place && !target)) continue;
     const key = `${title}|${owner}|${dept}`;
     const hit = byKey.get(key);
     if (hit) {
       hit.count = (hit.count || 1) + 1;
+      // 마지막에 고친 것이 가장 가깝다. 빈 값으로 덮지는 않는다.
       if (category) hit.category = category;
+      if (place) hit.place = place;
+      if (target) hit.target = target;
       bumped++;
     } else {
-      byKey.set(key, { title, owner, dept, category, count: 1, source });
+      byKey.set(key, { title, owner, dept, category, place, target, count: 1, source });
       added++;
     }
   }

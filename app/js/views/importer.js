@@ -62,15 +62,16 @@ export function renderImporter(ctx) {
     st.rows = rows.map((r) => ({ ...r, _include: !looksLikeHoliday(r.title) }));
     st.source = source;
     // 업무분장표와 과거 사례로 담당자를 채운다. 확신이 낮으면 제안만 남는다.
-    const { filled, hinted } = fillOwners(st.rows);
+    const { filled, hinted, recalled } = fillOwners(st.rows);
     drawPreview();
     if (!rows.length) { toast('읽어들일 일정을 찾지 못했습니다. 형식을 확인해 주세요.', 'warn'); return; }
     const extra = filled || hinted
       ? ` 담당자 ${filled}건 자동 입력${hinted ? `, ${hinted}건 제안` : ''}.`
       : '';
+    const back = recalled ? ` 전에 적으신 장소·대상 ${recalled}건을 되살렸습니다.` : '';
     const off = st.rows.filter((r) => !r._include).length;
     const offNote = off ? ` 쉬는 날 ${off}건은 체크를 꺼 두었습니다(학사일정 탭에서 올리세요).` : '';
-    toast(`${rows.length}건을 읽었습니다.${extra}${offNote} 내용을 확인한 뒤 등록하세요.`, 'ok');
+    toast(`${rows.length}건을 읽었습니다.${extra}${back}${offNote} 내용을 확인한 뒤 등록하세요.`, 'ok');
   };
 
   const handleFile = async (file) => {
@@ -151,15 +152,18 @@ export function renderImporter(ctx) {
         class: 'btn btn-sm',
         title: '업무분장표와 과거 사례로 빈 담당자를 다시 채웁니다',
         onClick: () => {
-          const { filled, hinted } = fillOwners(st.rows);
+          const { filled, hinted, recalled } = fillOwners(st.rows);
           drawPreview();
-          toast(filled || hinted ? `담당자 ${filled}건 입력, ${hinted}건 제안` : '채울 만한 담당자를 찾지 못했습니다.', filled || hinted ? 'ok' : 'warn');
+          const got = filled || hinted || recalled;
+          toast(got
+            ? `담당자 ${filled}건 입력, ${hinted}건 제안${recalled ? `, 장소·대상 ${recalled}건 되살림` : ''}`
+            : '채울 만한 담당자를 찾지 못했습니다.', got ? 'ok' : 'warn');
         },
       }, '담당자 다시 채우기') : null,
       isAdmin() ? h('label', { class: 'check' }, autoApprove, '등록과 동시에 승인') : null,
       !asMode && admin ? h('label', {
         class: 'check',
-        title: '활동명 → 담당·계·분류 를 기억합니다. [설정] → 담당자 자동 매칭에서 지울 수 있습니다.',
+        title: '활동명 → 담당·계·분류·장소·대상 을 기억합니다. 다음 달에 같은 활동이 오면 그대로 채웁니다. [설정] → 담당자 자동 매칭에서 지울 수 있습니다.',
       }, learn, '고친 내용 기억하기') : null,
       h('button', {
         class: 'btn btn-primary',
@@ -212,7 +216,7 @@ export function renderImporter(ctx) {
             if (admin && learn.checked) {
               try { learned = await learnFromRows(rows); } catch (e) { console.error(e); }
             }
-            const learnNote = learned ? ` 담당·분류 ${learned}가지를 기억했습니다.` : '';
+            const learnNote = learned ? ` 담당·분류·장소·대상 ${learned}가지를 기억했습니다.` : '';
             toast((approve ? `${acts.length}건을 등록·승인했습니다.` : `${acts.length}건을 제출했습니다. ${admin ? '승인함' : '[내 제출]'}에서 확인하세요.`) + learnNote, 'ok');
             ctx.go(approve ? 'monthly' : 'approvals');
           }
@@ -303,15 +307,21 @@ function activityPreviewTable(rows) {
 }
 
 /**
- * 등록한 줄에서 '활동명 → 담당·계·분류' 를 기억한다.
+ * 등록한 줄에서 '활동명 → 담당·계·분류·장소·대상' 을 기억한다.
  *
  * 선생님이 미리보기에서 고친 것이 곧 정답이다. 그것을 흘려보내지 않고 쌓아두면
  * 다음 달에는 같은 활동이 저절로 제자리에 들어간다. 시간표의 [기본 시간표] 와 같은 뜻이다.
+ *
+ * 날짜와 시간은 기억하지 않는다. 그 둘이야말로 달마다 달라지는 것이고,
+ * 월중계획에는 적혀 들어오기 때문이다.
  */
 async function learnFromRows(rows) {
   const pairs = rows
-    .filter((r) => r.title && (r.owner || r.dept || r.category))
-    .map((r) => ({ title: r.title, owner: r.owner || '', dept: r.dept || '', category: r.category || '' }));
+    .filter((r) => r.title && (r.owner || r.dept || r.category || r.place || r.target))
+    .map((r) => ({
+      title: r.title, owner: r.owner || '', dept: r.dept || '',
+      category: r.category || '', place: r.place || '', target: r.target || '',
+    }));
   if (!pairs.length) return 0;
   const { rows: merged, added, bumped } = mergeLessons(list('lessons'), pairs, FIXED_SOURCE);
   if (!added && !bumped) return 0;
