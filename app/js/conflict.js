@@ -168,8 +168,18 @@ export function timeRange(text, periods) {
 export const overlapsTime = (a, b) => !!(a && b && a.s < b.e && b.s < a.e);
 
 /**
+ * 순회 차례로 적은 대상 글귀 — '6-5-3-4-6학년', '6-5-3-4-6년', '6/5/3/4/6년'.
+ *
+ * 학교는 '학년' 을 '년' 으로 줄여 적는다. 둘은 같은 말이다.
+ * 사이에 두는 기호도 학교마다 -, ~, ·, 쉼표, 빗금으로 제각각이라 모두 받는다.
+ * 숫자가 셋 이상 이어졌을 때만 차례로 본다 — '3-4학년' 은 범위지 차례가 아니다.
+ */
+const SERIES = /\d(?:[~\-,·/]\d){2,}\s*학?년/;
+
+/**
  * 대상 글귀에서 학년 집합을 뽑는다.
  * '전교생' 은 전 학년, '3학년 2반' 은 3학년으로 본다(반까지 나누면 과하게 놓친다).
+ * '학년' 과 '년' 은 같은 말로 읽는다 ('5년' = '5학년').
  */
 export function gradeSet(text) {
   const t = String(text || '').replace(/\s/g, '');
@@ -180,7 +190,7 @@ export function gradeSet(text) {
   // '6-5-3-4-6학년' 은 순회 차례지 범위가 아니다. 1교시 6학년, 2교시 5학년 …
   // 이렇게 돈다는 뜻인데, 끝의 '4-6' 만 보고 '4~6학년' 으로 읽어 3학년을 놓쳤다.
   // 셋 이상이 이어져 있으면 차례로 보고 적힌 학년을 그대로 담는다.
-  const chain = t.match(/\d(?:[~\-,·]\d){2,}\s*학?년/);
+  const chain = t.match(SERIES);
   if (chain) {
     for (const d of chain[0].match(/\d/g)) out.add(Number(d));
     return out;
@@ -257,7 +267,7 @@ function legsOf(item, table) {
   const r = timeRange(item.time, table);
   if (!r) return [];
   const span = String(item.time || '').match(/(\d)\s*[~-]\s*(\d)\s*교시/);
-  const chain = String(item.target || '').replace(/\s/g, '').match(/\d(?:[~\-,·]\d){2,}\s*학?년/);
+  const chain = String(item.target || '').replace(/\s/g, '').match(SERIES);
   if (span && chain) {
     const from = Number(span[1]);
     const to = Number(span[2]);

@@ -3,6 +3,7 @@ import { h, openModal, toast, confirmDialog } from '../lib/dom.js';
 import { CATEGORY, STATUS, newActivity, today, fmtK, parseYmd, range } from '../model.js';
 import { put, audit, currentUser, isAdmin, canEditActs } from '../store.js';
 import { bellList, clashReasons } from '../conflict.js';
+import { ackClash, canAck } from '../clashok.js';
 import { hilitePicker } from './hilite.js';
 import { holidayOn } from '../lib/holidays.js';
 import { occupancyOn } from '../select.js';
@@ -170,7 +171,9 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
       || confirmDialog('적으신 내용이 저장되지 않았습니다. 창을 닫을까요?', { danger: true, okText: '닫기' }),
   });
   // 날짜·시간·장소·대상·담당이 바뀔 때마다 다시 본다.
+  let clashing = [];   // 지금 겹치고 있는 것들 — 아래 [인정] 단추가 이것을 쓴다
   const checkAhead = () => {
+    clashing = [];
     const date = inp.date.value;
     const lines = [];
     if (date) {
@@ -192,20 +195,47 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
         place: inp.place.value.trim(), target: inp.target.value.trim(), owner: inp.owner.value.trim(),
       };
       if (cand.time) {
-        const hits = occupancyOn(date)
+        clashing = occupancyOn(date)
           .filter((o) => o.id !== a.id)
           .map((o) => [o, clashReasons(cand, o)])
           .filter(([, why]) => why.length);
-        for (const [o, why] of hits.slice(0, 3)) {
+        for (const [o, why] of clashing.slice(0, 3)) {
           // 조사(와/과)는 앞 글자 받침에 따라 달라서 붙이지 않는다.
           lines.push(`겹침 · ${o.time ? `${o.time} ` : ''}${o.title} (${why.join(', ')})`);
         }
-        if (hits.length > 3) lines.push(`그 밖에도 ${hits.length - 3}건이 겹칩니다.`);
+        if (clashing.length > 3) lines.push(`그 밖에도 ${clashing.length - 3}건이 겹칩니다.`);
       }
     }
-    warnBox.replaceChildren(...lines.map((t) => h('p', {}, '\u26A0 ', t)));
+    warnBox.replaceChildren(...lines.map((t) => h('p', {}, '\u26A0 ', t)), ackLine());
     warnBox.hidden = !lines.length;
   };
+
+  /**
+   * 겹쳐도 되는 것이면 이 자리에서 바로 인정한다.
+   *
+   * 원어민 순회처럼 교육활동과 시간표에 같은 수업을 두 군데 적어 두는 일이 있다.
+   * 그것은 틀린 겹침이 아니라 '같은 것을 두 번 적은 것' 이라 고칠 것이 없는데,
+   * 창을 닫고 카드를 찾아 🎨 옆 단추를 눌러야 했다. 경고가 뜨는 자리에 둔다.
+   *
+   * 새로 쓰는 일정에는 두지 않는다 — 아직 저장된 문서가 없어 적어 둘 곳이 없다.
+   */
+  function ackLine() {
+    if (isNew || !clashing.length || !canAck(a)) return null;
+    return h('p', { class: 'warn-act' },
+      h('button', {
+        type: 'button', class: 'btn-ack',
+        title: '이 겹침들은 그래도 된다고 표시합니다. 모든 선생님 화면에서 빨간 테두리가 사라집니다.',
+        onClick: async () => {
+          try {
+            const next = await ackClash(a, clashing.map(([o]) => o));
+            a.clashOk = next.clashOk || [];
+            toast(`겹침 ${clashing.length}건을 인정했습니다. 되돌리는 것은 [일일] 화면 아래 [인정한 중복] 에서 합니다.`, 'ok');
+            checkAhead();
+          } catch (e) { toast(e.message || '인정하지 못했습니다.', 'warn'); }
+        },
+      }, `이 겹침 ${clashing.length}건 인정`),
+      h('span', { class: 'muted small' }, ' 같은 수업을 시간표에도 적어 둔 것이라면 눌러두세요.'));
+  }
   for (const el of [inp.date, inp.endDate, inp.time, inp.place, inp.target, inp.owner, bellSel, multiChk]) {
     el.addEventListener('input', checkAhead);
     el.addEventListener('change', checkAhead);

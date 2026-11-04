@@ -631,6 +631,9 @@ body.dragging-now .band-grid { pointer-events: none; }
   cursor: pointer; white-space: nowrap; vertical-align: baseline;
 }
 .btn-ack:hover { color: var(--text); border-color: var(--muted); }
+/* 일정 창의 경고 아래 한 줄 — 경고문과 섞이지 않게 위에 금을 긋는다 */
+.warn-act { margin: 7px 0 0; padding-top: 7px; border-top: 1px dashed var(--line); }
+.warn-act .btn-ack { margin-left: 0; }
 
 /* 인정해 둔 중복 — 더는 경고가 아니다. 회색으로 가라앉혀 둔다. */
 .clash-list.is-acked { color: var(--muted); }
