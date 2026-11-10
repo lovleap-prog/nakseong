@@ -169,6 +169,8 @@ export function openPeriodExport(from, to, title, form = 'weekly') {
           const blob = await buildHwpxDoc(doc.blocks, {
             title: doc.title, font: cfg.hwp.font, fontSize: cfg.hwp.fontSize,
             marginX, marginY: 2834,
+            // 주간 서식은 1쪽에 맞춘 글자 크기·칸 줄 간격을 들고 온다(formdoc 의 fitWeekPage).
+            ...(doc.hwp || {}),
           });
           download(`${fileName()}.hwpx`, blob);
           toast('내려받았습니다. 열리지 않으면 [한글용 HTML]을 쓰세요.', 'ok');

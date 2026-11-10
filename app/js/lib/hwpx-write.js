@@ -49,9 +49,14 @@ const TIGHT_BASE = 4;
 /** 이 칸이 쓸 글자 모양 번호 */
 const charPrOf = (x) => (x.tight > 0 && x.tight < TIGHT_PCT.length ? TIGHT_BASE + x.tight - 1 : 0);
 
-/** 문단 모양: 0=왼쪽, 1=가운데 */
-function paraProperties() {
-  const pr = (id, align) =>
+/**
+ * 문단 모양: 0=왼쪽, 1=가운데 (본문·제목) / 2=왼쪽, 3=가운데 (표 칸 안)
+ *
+ * 칸 안 문단을 따로 둔 것은 표가 한 쪽에 넘칠 때 줄 간격만 좁혀 앉히기 위해서다.
+ * 제목과 본문까지 함께 좁아지면 서식이 달라 보인다. 기본은 둘 다 160% 로 같다.
+ */
+function paraProperties(cellSpacing = 160) {
+  const pr = (id, align, spacing = 160) =>
     `<hh:paraPr id="${id}" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0">` +
     `<hh:align horizontal="${align}" vertical="BASELINE"/>` +
     `<hh:heading type="NONE" idRef="0" level="0"/>` +
@@ -59,13 +64,14 @@ function paraProperties() {
     `<hh:autoSpacing eAsianEng="0" eAsianNum="0"/>` +
     `<hh:switch><hh:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">` +
     `<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/><hc:next value="0" unit="HWPUNIT"/></hh:margin>` +
-    `<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hh:case>` +
+    `<hh:lineSpacing type="PERCENT" value="${spacing}" unit="HWPUNIT"/></hh:case>` +
     `<hh:default>` +
     `<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/><hc:next value="0" unit="HWPUNIT"/></hh:margin>` +
-    `<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/></hh:default></hh:switch>` +
+    `<hh:lineSpacing type="PERCENT" value="${spacing}" unit="HWPUNIT"/></hh:default></hh:switch>` +
     `<hh:border borderFillIDRef="1" offsetLeft="0" offsetRight="0" offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/>` +
     `</hh:paraPr>`;
-  return `<hh:paraProperties itemCnt="2">${pr(0, 'JUSTIFY')}${pr(1, 'CENTER')}</hh:paraProperties>`;
+  return `<hh:paraProperties itemCnt="4">${pr(0, 'JUSTIFY')}${pr(1, 'CENTER')}` +
+    `${pr(2, 'JUSTIFY', cellSpacing)}${pr(3, 'CENTER', cellSpacing)}</hh:paraProperties>`;
 }
 
 function headerXml(opt) {
@@ -85,7 +91,7 @@ function headerXml(opt) {
       [1, 2, 3, 4, 5, 6, 7].map((l) =>
         `<hh:paraHead start="1" level="${l}" align="LEFT" useInstWidth="1" autoIndent="1" widthAdjust="0" textOffsetType="PERCENT" textOffset="50" numFormat="DIGIT" charPrIDRef="4294967295" checkable="0">^${l}.</hh:paraHead>`).join('') +
     `</hh:numbering></hh:numberings>` +
-    paraProperties() +
+    paraProperties(opt.cellLineSpacing || 160) +
     `<hh:styles itemCnt="1"><hh:style id="0" type="PARA" name="바탕글" engName="Normal" paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" langID="1042" lockForm="0"/></hh:styles>` +
     `</hh:refList>` +
     `<hh:compatibleDocument targetProgram="HWP201X"><hh:layoutCompatibility/></hh:compatibleDocument>` +
@@ -193,6 +199,64 @@ function layoutCells(rows, colCount) {
   });
 }
 
+// ── 쪽 채우기에 쓰는 높이 계산 ─────────────────────────────
+// 한글은 칸 높이를 '적어도 이만큼' 으로 본다. 글이 더 많으면 저절로 늘리고, 칸을 더
+// 높게 잡으면 그만큼 비워 둔다. 그래서 쪽 아래까지 채우려면 글이 실제로 차지하는
+// 높이를 알아야 한다. 줄 간격(%) × 글자 크기가 한 줄이고, 거기에 칸 위아래 여백과
+// 테두리를 더한다. 조금 넉넉히 잡는다 — 모자라게 잡으면 마지막 줄이 다음 쪽으로
+// 넘어가고, 넉넉하게 잡으면 아래가 조금 빌 뿐이다. 넘어가는 쪽이 훨씬 보기 싫다.
+
+const ROW_PAD = 141 * 2 + 60;      // 칸 위아래 여백 + 테두리
+const SAFE = 1.05;                  // 계산보다 5% 넉넉히
+
+/** 칸 안 한 줄의 높이 */
+const cellPitch = (opt = {}) =>
+  Math.ceil((opt.fontSize || 11) * 100 * ((opt.cellLineSpacing || 160) / 100) * SAFE);
+
+/** 격자의 줄마다 글이 실제로 차지하는 높이. 세로로 합친 칸은 그 줄 혼자 책임지지 않는다. */
+function rowNeeds(grid, opt) {
+  const pitch = cellPitch(opt);
+  return grid.map((row) => {
+    const n = row.reduce((m, x) => (x.rowSpan === 1 ? Math.max(m, x.t.split('\n').length) : m), 1);
+    return n * pitch + ROW_PAD;
+  });
+}
+
+/** 표 하나가 차지할 높이 (HWPUNIT). 칸 높이를 늘리기 전, 글만으로. */
+export function tableNeed(t, opt = {}) {
+  const head = (t.head || []).length ? [t.head] : [];
+  const all = [...head, ...(t.rows || [])];
+  const colCount = (t.cols || []).length
+    || all.reduce((m, r) => Math.max(m, r.reduce((n, c) => n + cellOf(c).colSpan, 0)), 1);
+  return rowNeeds(layoutCells(all, colCount), opt).reduce((a, b) => a + b, 0);
+}
+
+/**
+ * 한 쪽에서 본문이 쓸 수 있는 높이.
+ * 한글은 위 여백 · 머리말 · 꼬리말 · 아래 여백을 모두 빼고 본문을 앉힌다(secPr 과 같은 값).
+ */
+export function bodyHeight(opt = {}) {
+  const top = opt.marginY || 5668;
+  const bottom = opt.marginY || 4252;
+  return PAGE_H - top - bottom - 2834 - 2834;
+}
+
+/**
+ * 문단 하나의 높이 — 제목·본문·작은 글. 문단 줄 간격은 160% 그대로다.
+ * text 를 주면 쪽 너비에서 몇 줄로 접히는지도 센다(한글 한 자 ≈ 글자 크기 한 칸).
+ */
+export function paraNeed(kind, opt = {}, text = '') {
+  const fs = opt.fontSize || 11;
+  const k = kind === 'title' || kind === 'banner' ? 1.35 : kind === 'small' ? 0.85 : 1;
+  const usable = PAGE_W - (opt.marginX || 4251) * 2;
+  const perLine = Math.max(1, Math.floor(usable / (fs * 100 * k)));
+  const lines = text ? Math.max(1, Math.ceil([...String(text)].length / perLine)) : 1;
+  return Math.ceil(lines * fs * 100 * k * 1.6 * SAFE);
+}
+
+/** 표를 담은 문단이 표 말고 더 차지하는 것 — 표 아래 바깥 여백과 그 줄의 줄 간격 몫 */
+export const tableParaExtra = (opt = {}) => 141 + Math.ceil((opt.fontSize || 11) * 100 * 0.6);
+
 function tblXml(t, opt, id) {
   const fs = opt.fontSize || 11;
   const usable = PAGE_W - (opt.marginX || 4251) * 2;
@@ -208,10 +272,24 @@ function tblXml(t, opt, id) {
 
   const grid = layoutCells(all, colCount);
   const lineH = Math.round(fs * 100 * 1.35);
-  const rowH = grid.map((row) => {
+  let rowH = grid.map((row) => {
     const n = row.reduce((m, x) => (x.rowSpan === 1 ? Math.max(m, x.t.split('\n').length) : m), 1);
     return n * lineH + 568;
   });
+  // 쪽 아래까지 채운다. 한 줄마다 같은 만큼 늘린다 — 줄마다 다르게 늘리면 들쭉날쭉해 보인다.
+  // 칸 높이는 '적어도 이만큼' 이라, 늘린 만큼 한글이 그대로 따른다.
+  // snug 은 '글 크기에 꼭 맞게' — 쪽을 다 채우지는 못해도(넘치는 주) 칸을 쓸데없이 키우지 않는다.
+  if (t.fillTo || t.snug) {
+    const need = rowNeeds(grid, opt);
+    const extra = (t.fillTo || 0) - need.reduce((a, b) => a + b, 0);
+    const n = grid.length - head.length;
+    if (extra > 0 && n > 0) {
+      const add = Math.floor(extra / n);
+      rowH = need.map((h, r) => (r < head.length ? h : h + add));
+    } else {
+      rowH = need;
+    }
+  }
   const tblH = rowH.reduce((a, b) => a + b, 0);
 
   const span = (arr, from, n) => arr.slice(from, from + n).reduce((a, b) => a + b, 0);
@@ -219,7 +297,7 @@ function tblXml(t, opt, id) {
 
   const trs = grid.map((row, r) => '<hp:tr>' + row.map((x) => {
     const paras = x.t.split('\n');
-    const paraPr = x.align === 'left' ? 0 : 1;
+    const paraPr = x.align === 'left' ? 2 : 3;
     const charPr = isHead(r) ? 3 : charPrOf(x);
     const inner = paras.map((line) =>
       `<hp:p id="2147483648" paraPrIDRef="${paraPr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">` +

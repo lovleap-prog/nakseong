@@ -12,6 +12,7 @@ import { holidayOn } from './holidays.js';
 import { activitiesOn, recurringOn, isNoMeal, cleanDetail } from '../select.js';
 import { loadConfig } from '../config.js';
 import { packItems, fitText, capEm } from './fitline.js';
+import { tableNeed, bodyHeight, paraNeed, tableParaExtra } from './hwpx-write.js';
 
 /**
  * 그 주가 몇 월 몇째 주인가.
@@ -144,8 +145,8 @@ const WEEK_COLS = [
   { label: '장소', w: 18.0 },
 ];
 
-/** 주간 표 하나 */
-function weekMainTable(from, to) {
+/** 주간 표 하나. fs 는 글자 크기(pt) — 칸마다 몇 글자가 들어가는지가 여기에 달렸다. */
+function weekMainTable(from, to, fs = fontPt()) {
   const rows = [];
   let lastDay = '';
   for (const d of range(from, to)) {
@@ -170,13 +171,13 @@ function weekMainTable(from, to) {
       // 좁은 칸에 한두 글자가 넘치면 자간을 조금 줄여 한 줄에 앉힌다.
       // '정하늘아, 오진영' 이 이름 한가운데서 끊기던 자리다.
       const fit = (text, col) => {
-        const f = fitText(text, capEm(USABLE_WEEK, WEEK_COLS[col].w, fontPt()));
+        const f = fitText(text, capEm(USABLE_WEEK, WEEK_COLS[col].w, fs));
         return { t: f.text, tight: f.tight };
       };
       // 이름이 둘이면 '정하늘아, 오진영' 이 '정하늘 / 아, 오진영' 으로 끊겼다.
       // 쉼표에서 끊어 한 줄에 한 사람씩 세운다. 쉼표도 함께 떼어 낸다.
       const fitNames = (text, col) => {
-        const cap = capEm(USABLE_WEEK, WEEK_COLS[col].w, fontPt());
+        const cap = capEm(USABLE_WEEK, WEEK_COLS[col].w, fs);
         const names = String(text || '').split(/\s*,\s*/).filter(Boolean);
         const f = names.length > 1 ? packItems(names, cap, ', ') : fitText(text, cap);
         return { t: f.text.replace(/,$/gm, ''), tight: f.tight };
@@ -252,28 +253,84 @@ function weekTimetable(from) {
  */
 export function weeklyForm(from, to, { timetable = true } = {}) {
   const cfg = loadConfig();
-  const main = weekMainTable(from, to);
+  // 비급식일은 학교 서식에 칸이 따로 없다. 칸을 늘리면 결재 서식이 달라지니 표 밑에 한 줄로 적는다.
+  const meals = noMealIn(from, addDays(from, 6));
+  const notice = noticeText('notice', from);
+  const notes = [
+    meals ? `※ 비급식일: ${meals}` : '',
+    notice ? `※ ${notice.replace(/\n/g, ' ')}` : '',
+  ].filter(Boolean);
+
+  // 1쪽(주요 교육활동)을 아래 여백까지 채운다. 넘치면 줄이고, 남으면 칸을 늘린다.
+  const fit = fitWeekPage(from, to, notes);
+  const main = fit.main;
   // 학교 서식은 월~토가 한 주다. 일요일에 일정이 있을 때만 거기까지 늘린다.
   const sat = addDays(from, 5);
   const label = weekLabel(from, main.lastDay > sat ? main.lastDay : sat);
   const tt = weekTimetable(from);
-  const notice = noticeText('notice', from);
 
   const blocks = [
     { kind: 'title', text: `${label} 주요 교육활동` },
     { kind: 'table', table: main },
   ];
-  // 비급식일은 학교 서식에 칸이 따로 없다. 칸을 늘리면 결재 서식이 달라지니 표 밑에 한 줄로 적는다.
-  const meals = noMealIn(from, addDays(from, 6));
-  if (meals) blocks.push({ kind: 'small', text: `※ 비급식일: ${meals}` });
-  if (notice) blocks.push({ kind: 'small', text: `※ ${notice.replace(/\n/g, ' ')}` });
+  for (const n of notes) blocks.push({ kind: 'small', text: n });
   if (timetable && !tt.empty) {
     // 1쪽은 주요 교육활동, 2쪽은 교과교담. 결재에 올릴 때 쪽이 섞이지 않게 끊는다.
     blocks.push({ kind: 'title', text: `${label} 교과교담`, brk: true });
     blocks.push({ kind: 'body', text: `${parseYmd(from).getFullYear()}. ${termOf(from)}학기 교담 시간표` });
     blocks.push({ kind: 'table', table: tt });
   }
-  return { title: `${label} 주요 교육활동${cfg.school.name ? ` - ${cfg.school.name}` : ''}`, label, blocks };
+  return {
+    title: `${label} 주요 교육활동${cfg.school.name ? ` - ${cfg.school.name}` : ''}`, label, blocks,
+    // 한글 파일을 만들 때 쓴다. 1쪽에 맞춘 글자 크기·칸 줄 간격과, 그 계산에 쓴 여백이다.
+    hwp: { fontSize: fit.fs, cellLineSpacing: fit.ls, marginX: WEEK_MARGIN, marginY: WEEK_MARGIN },
+  };
+}
+
+// 주간 서식의 쪽 여백 — 위아래·좌우 모두 10mm. 쪽 높이를 셀 때와 파일을 만들 때 같은 값이어야 한다.
+const WEEK_MARGIN = 2834;
+
+/**
+ * 주요 교육활동 표를 1쪽에 꼭 맞춘다.
+ *
+ * 일정이 적은 주는 표가 위쪽에 몰려 아래 반이 텅 비고, 많은 주는 마지막 두어 줄이
+ * 2쪽으로 넘어가 결재판에 두 장이 올라갔다. 손으로 칸을 늘리고 줄이던 일이다.
+ *
+ *   남으면  — 줄마다 같은 만큼 칸을 늘려 아래 여백까지 채운다.
+ *   넘치면  — 칸 안 줄 간격을 먼저 좁히고(160→140→125%), 그래도 넘치면 글자를 반 pt 씩
+ *             줄인다. 글자부터 줄이면 읽기가 먼저 나빠지기 때문이다.
+ *   그래도 넘치면 — 가장 작게 한 채 2쪽으로 넘긴다. 9pt 아래로 내리면 결재판에서 안 읽힌다.
+ *
+ * 높이는 한글이 칸 높이를 재는 방식대로 계산한다(hwpx-write 의 tableNeed). 조금 넉넉히
+ * 잡고, 한 줄만큼 남겨 둔다 — 넘어가는 것이 조금 비는 것보다 훨씬 보기 싫다.
+ */
+function fitWeekPage(from, to, notes) {
+  const base = fontPt();
+  const steps = [
+    [base, 160], [base, 140], [base, 125],
+    [base - 0.5, 125], [base - 1, 120], [base - 1.5, 115], [base - 2, 110],
+  ].filter(([fs]) => fs >= Math.min(9, base));
+
+  let last = null;
+  for (const [fs, ls] of steps) {
+    const opt = { fontSize: fs, cellLineSpacing: ls, marginX: WEEK_MARGIN, marginY: WEEK_MARGIN };
+    const room = bodyHeight(opt)
+      - paraNeed('title', opt)
+      // 표 아래 안내(비급식일·공지)는 길면 두 줄로 접힌다. 접히는 만큼 센다.
+      - notes.reduce((sum, n) => sum + paraNeed('small', opt, n), 0)
+      - tableParaExtra(opt)
+      - paraNeed('body', opt);               // 한 줄만큼 남겨 둔다
+    const main = weekMainTable(from, to, fs);
+    last = { main, fs, ls };
+    if (!main.rows.length) return last;      // 일정이 없는 주 — 머리줄만 덩그러니 늘리지 않는다
+    if (tableNeed(main, opt) <= room) {
+      main.fillTo = room;
+      return last;
+    }
+  }
+  // 가장 작게 해도 넘친다 — 2쪽으로 넘긴다. 칸은 글 크기에 꼭 맞춰 쪽 수라도 줄인다.
+  last.main.snug = true;
+  return last;
 }
 
 /** 그 주의 비급식일을 '10.2.(금)' 꼴로 이어 붙인다. 없으면 빈 글. */
