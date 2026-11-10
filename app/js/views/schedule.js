@@ -99,6 +99,11 @@ export function activityCard(a, { compact = false, onChange, checkDate = '', sho
     !a.isRecurring && canEdit
       ? h('div', { class: 'card-actions' },
         h('button', { class: 'icon-btn', title: '수정', onClick: () => openActivityForm(a, { onSaved: onChange }) }, '✎'),
+        // 학년만 다르고 내용이 같은 일정을 하나씩 다시 치고 있었다. 본떠 새로 만든다.
+        h('button', {
+          class: 'icon-btn', title: '복사해서 새 일정 만들기 (대상만 바꿀 때)',
+          onClick: () => openActivityForm(null, { copyFrom: a, onSaved: onChange }),
+        }, '\u29C9'),
         // 강조는 창을 열지 않고 그 자리에서 색만 바꾼다. 여러 건을 훑으며 칠하는 일이라서다.
         // 늘 쓰던 ✎ 는 자리를 지킨다. 손이 기억하는 자리를 옮기면 잘못 누른다.
         canEditActs()
@@ -441,6 +446,10 @@ function spanCard(a, day, onChange) {
           class: 'icon-btn', title: '수정',
           onClick: () => openActivityForm(a, { onSaved: onChange }),
         }, '\u270E'),
+        h('button', {
+          class: 'icon-btn', title: '복사해서 새 일정 만들기 (대상만 바꿀 때)',
+          onClick: () => openActivityForm(null, { copyFrom: a, onSaved: onChange }),
+        }, '\u29C9'),
         isAdmin()
           ? h('button', {
             class: `icon-btn hl-btn${a.hl ? ' on' : ''}`, title: '음영 강조 색 고르기',

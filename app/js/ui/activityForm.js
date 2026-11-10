@@ -12,9 +12,30 @@ const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input,
     hint ? h('span', { class: 'field-hint' }, hint) : null);
 
-export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
+/**
+ * 복사해 올 칸 — 내용만.
+ * 누가 올렸는지, 승인됐는지, 고친 이력, 겹침 인정은 원래 일정의 것이라 따라오지 않는다.
+ * 겹침 인정을 들고 오면 학년이 바뀌었는데도 예전 짝을 '괜찮다' 고 여기게 된다.
+ */
+const COPY_KEYS = ['date', 'endDate', 'time', 'title', 'detail', 'target', 'place',
+  'owner', 'dept', 'category', 'bellId', 'needsBus', 'busNote'];
+
+function copyFields(src) {
+  const out = {};
+  for (const k of COPY_KEYS) if (src[k] !== undefined) out[k] = src[k];
+  // 음영 강조는 고를 수 있는 분이 복사할 때만 따라온다.
+  if (canEditActs() && src.hl) out.hl = src.hl;
+  return out;
+}
+
+/**
+ * @param copyFrom  이 일정을 본떠 새 일정을 만든다. 학년만 다르고 내용이 같은 일정을
+ *                  달마다, 학년마다 다시 치고 계셨다. 바뀌는 칸(대상)에 바로 커서를 둔다.
+ */
+export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = {}) {
   const isNew = !existing;
-  const a = existing ? structuredClone(existing) : newActivity({ date: defaultDate || today() });
+  const a = existing ? structuredClone(existing)
+    : newActivity(copyFrom ? copyFields(copyFrom) : { date: defaultDate || today() });
   const before = existing ? structuredClone(existing) : null;
   const me = currentUser();
 
@@ -99,7 +120,9 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
     h('div', { class: 'span2' }, field('세부 내용', detail)),
     hlBox,
     h('div', { class: 'span2' }, busBox),
-    isAdmin() ? h('div', { class: 'span2' }, field('처리 상태', statusSel, '관리자만 변경할 수 있습니다.')) : null,
+    // 새 일정에서는 이 칸이 아무 일도 하지 않는다 — 관리자가 올리면 곧바로 승인이다.
+    // '확인 대기' 로 보이는데 승인으로 들어가 헷갈렸다. 고칠 때만 보인다.
+    isAdmin() && !isNew ? h('div', { class: 'span2' }, field('처리 상태', statusSel, '관리자만 변경할 수 있습니다.')) : null,
   );
 
   // 적은 것이 있는지 본다. 빈 창을 닫을 때까지 물어보면 그것대로 성가시다.
@@ -108,7 +131,13 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
   let saved = false;
   const at0 = snapshot();
 
-  const close = openModal(isNew ? '교육활동 추가' : '교육활동 수정', body, [
+  if (copyFrom) {
+    body.prepend(h('p', { class: 'span2 note copy-note' },
+      `'${copyFrom.title}' 을(를) 그대로 옮겨 왔습니다. 대상처럼 달라진 칸만 고치고 등록하세요. `,
+      h('span', { class: 'muted small' }, '원래 일정은 그대로 남습니다.')));
+  }
+
+  const close = openModal(copyFrom ? '교육활동 복사' : isNew ? '교육활동 추가' : '교육활동 수정', body, [
     { label: '취소', onClick: (c) => c() },
     {
       label: isNew ? (isAdmin() ? '등록' : '제출(확인 요청)') : '저장',
@@ -161,7 +190,9 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
         await put('activities', a);
         await audit(isNew ? '등록' : '수정', a.id, before, a);
         saved = true;
-        toast(isNew ? (isAdmin() ? '등록했습니다.' : '제출했습니다. 관리자 확인을 기다립니다.') : '저장했습니다.', 'ok');
+        toast(isNew
+          ? `${copyFrom ? '복사해 ' : ''}${isAdmin() ? '등록했습니다.' : '제출했습니다. 관리자 확인을 기다립니다.'}`
+          : '저장했습니다.', 'ok');
         c();
         if (onSaved) onSaved(a);
       },
@@ -206,7 +237,9 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
         if (clashing.length > 3) lines.push(`그 밖에도 ${clashing.length - 3}건이 겹칩니다.`);
       }
     }
-    warnBox.replaceChildren(...lines.map((t) => h('p', {}, '\u26A0 ', t)), ackLine());
+    // replaceChildren 은 null 을 글자 'null' 로 넣는다. 단추가 없을 때는 아예 빼야 한다.
+    const act = ackLine();
+    warnBox.replaceChildren(...lines.map((t) => h('p', {}, '\u26A0 ', t)), ...(act ? [act] : []));
     warnBox.hidden = !lines.length;
   };
 
@@ -243,6 +276,12 @@ export function openActivityForm(existing, { onSaved, defaultDate } = {}) {
   syncMulti();
   checkAhead();
 
-  setTimeout(() => inp.title && inp.title.focus(), 40);
+  // 복사할 때는 대상에 커서를 두고 글자를 골라 둔다. 바로 치면 바뀐다.
+  setTimeout(() => {
+    const el = copyFrom ? inp.target : inp.title;
+    if (!el) return;
+    el.focus();
+    if (copyFrom) el.select();
+  }, 40);
   return close;
 }
