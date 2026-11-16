@@ -7,6 +7,7 @@
 // 외부 AI 를 쓰지 않는다. 학교 일정은 낱말이 정형화돼 있어서 글자 2-gram 유사도만으로
 // 충분히 맞고, API 키도 필요 없고, 명단이 학교 밖으로 나가지 않는다.
 import { list } from './store.js';
+import { normGrades, normTime, normDates } from './lib/notation.js';
 
 /** 한글은 띄어쓰기가 들쭉날쭉해서 낱말 대신 글자 2-gram 으로 비교한다. */
 export function bigrams(text) {
@@ -242,8 +243,13 @@ export function suggestCategory(title, sources = matchSources()) {
   return { category: ranked[0][0], score: Math.round(ranked[0][1] * 100) / 100 };
 }
 
-/** 띄어쓰기·괄호가 들쭉날쭉해도 같은 행사로 보기 위한 납작한 이름 */
-const flatTitle = (t) => String(t || '').replace(/[^가-힣A-Za-z0-9]+/g, '');
+/**
+ * 띄어쓰기·괄호·표기가 들쭉날쭉해도 같은 행사로 보기 위한 납작한 이름.
+ * '예방교육(3~4년)' 과 '예방교육(3-4학년)' 은 같은 행사다 — 표기를 맞춘 뒤 비교한다.
+ * (비교용 열쇠일 뿐 화면에 보이지 않으니, 괄호 밖까지 맞춰도 된다.)
+ */
+const flatTitle = (t) => normDates(normTime(normGrades(String(t || ''))))
+  .replace(/[^가-힣A-Za-z0-9]+/g, '');
 
 /**
  * 같은 행사를 전에 어떻게 적었는지 되살린다 — 장소와 대상.

@@ -7,6 +7,7 @@ import { ackClash, canAck } from '../clashok.js';
 import { hilitePicker } from './hilite.js';
 import { holidayOn } from '../lib/holidays.js';
 import { occupancyOn } from '../select.js';
+import { normalizeField, FIELD_LABEL, describeChange } from '../lib/notation.js';
 
 const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input,
@@ -99,6 +100,28 @@ export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = 
 
   // 쉬는 날·겹침을 제출 전에 알려 준다. 막지는 않는다(쉬는 날 돌봄·방과후를 적는 학교가 있다).
   const warnBox = h('div', { class: 'span2 form-warn', role: 'status', 'aria-live': 'polite' });
+  // 표기를 맞췄다는 안내. '3~6년' 을 쳤는데 '3-6학년' 이 되면 왜 바뀌었는지 알아야 한다.
+  const fixBox = h('div', { class: 'span2 form-fix', role: 'status', 'aria-live': 'polite' });
+  fixBox.hidden = true;
+  const fixed = new Map();   // 칸 → { from, to } (같은 칸을 여러 번 고쳐도 마지막 것만)
+  const showFixes = () => {
+    fixBox.replaceChildren(
+      h('b', {}, '\u2713 표기를 맞췄습니다 '),
+      h('span', { class: 'muted small' }, '학년·교시는 하이픈(3-6학년), 시각·날짜는 물결(15:00~16:00)'),
+      ...[...fixed.entries()].map(([key, c]) => h('div', { class: 'fix-line' },
+        describeChange({ label: FIELD_LABEL[key], from: c.from, to: c.to }))));
+    fixBox.hidden = !fixed.size;
+  };
+  /** 칸을 떠날 때 표기를 맞춘다. 치는 동안에는 건드리지 않는다 — 커서가 튀면 성가시다. */
+  const tidy = (key, el) => {
+    const from = el.value;
+    const to = normalizeField(key, from);
+    if (to === from) return;
+    el.value = to;
+    const prev = fixed.get(key);
+    fixed.set(key, { from: prev ? prev.from : from, to });
+    showFixes();
+  };
 
   // 활동명을 맨 위에 둔다. '무엇을' 이 먼저 떠오르는데 날짜·종료일·시간·분류를 지나야 나왔다.
   const body = h('div', { class: 'form-grid' },
@@ -108,6 +131,7 @@ export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = 
     h('label', { class: 'check span2' }, multiChk, '여러 날 이어집니다'),
     (endWrap.append(field('종료일', mk('endDate', { type: 'date' }))), endWrap),
     warnBox,
+    fixBox,
     field('대상', mk('target', { placeholder: '예) 3학년, 전교생' })),
     field('장소', mk('place', { placeholder: '예) 시청각실' })),
     field('담당', mk('owner', { placeholder: '예) 김민수' })),
@@ -150,6 +174,9 @@ export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = 
           return toast('배차 내용을 적어주세요. 출발 시각과 가는 곳이 있어야 신청할 수 있습니다.', 'warn');
         }
 
+        // 칸을 떠나지 않고 바로 [등록] 을 누르면 'change' 가 안 일어난다. 여기서 한 번 더 맞춘다.
+        for (const [key, el] of [['title', inp.title], ['target', inp.target], ['time', inp.time], ['detail', detail]]) tidy(key, el);
+
         Object.assign(a, {
           date: val('date'),
           endDate: multiChk.checked && val('endDate') > val('date') ? val('endDate') : '',
@@ -190,9 +217,10 @@ export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = 
         await put('activities', a);
         await audit(isNew ? '등록' : '수정', a.id, before, a);
         saved = true;
-        toast(isNew
+        const fixNote = fixed.size ? ` (표기 ${fixed.size}곳을 맞췄습니다)` : '';
+        toast((isNew
           ? `${copyFrom ? '복사해 ' : ''}${isAdmin() ? '등록했습니다.' : '제출했습니다. 관리자 확인을 기다립니다.'}`
-          : '저장했습니다.', 'ok');
+          : '저장했습니다.') + fixNote, 'ok');
         c();
         if (onSaved) onSaved(a);
       },
@@ -269,6 +297,10 @@ export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = 
         },
       }, `이 겹침 ${clashing.length}건 인정`),
       h('span', { class: 'muted small' }, ' 겹쳐도 되는 것이면 눌러두세요.'));
+  }
+  // 표기 맞추기를 겹침 보기보다 먼저 붙인다. 같은 'change' 에서 맞춘 값으로 겹침을 본다.
+  for (const [key, el] of [['title', inp.title], ['target', inp.target], ['time', inp.time], ['detail', detail]]) {
+    el.addEventListener('change', () => tidy(key, el));
   }
   for (const el of [inp.date, inp.endDate, inp.time, inp.title, inp.place, inp.target, inp.owner, inp.dept, bellSel, multiChk]) {
     el.addEventListener('input', checkAhead);

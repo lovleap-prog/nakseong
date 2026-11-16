@@ -1512,6 +1512,14 @@ body.widget .widget-body { padding-bottom: 16px; }
   border-radius: 8px; padding: 7px 10px; font-size: 13px; line-height: 1.5;
 }
 .form-warn p { margin: 0; }
+/* 표기를 맞췄다는 안내 — 경고가 아니라 알림이라 초록으로 가라앉힌다 */
+.form-fix {
+  background: color-mix(in srgb, var(--ok) 9%, transparent); color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--ok) 30%, var(--line));
+  border-radius: 8px; padding: 7px 10px; font-size: 13px; line-height: 1.55;
+}
+.form-fix b { color: var(--ok); }
+.form-fix .fix-line { font-variant-numeric: tabular-nums; }
 .form-warn p + p { margin-top: 2px; }
 
 /* 일일 출장 칩의 보결 내용 — '5,6교시 3-1반' */

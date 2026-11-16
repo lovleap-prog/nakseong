@@ -7,6 +7,7 @@ import { readHwpx } from '../lib/hwpx-read.js';
 import { readXlsx } from '../lib/xlsx-read.js';
 import { putMany, audit, currentUser, isAdmin, list } from '../store.js';
 import { fillOwners, suggestOwner, matchSources, AUTO_FILL_FLOOR, mergeLessons, FIXED_SOURCE } from '../matcher.js';
+import { normalizeActivity, normalizeField, describeChange } from '../lib/notation.js';
 import { newLesson } from '../model.js';
 import { looksLikeHoliday } from '../lib/holidays.js';
 import { confCls, confLabel } from './staffbox.js';
@@ -63,6 +64,14 @@ export function renderImporter(ctx) {
     st.source = source;
     // 업무분장표와 과거 사례로 담당자를 채운다. 확신이 낮으면 제안만 남는다.
     const { filled, hinted, recalled } = fillOwners(st.rows);
+    // 표기를 맞춘다 — 3~6년 · 3-6년 · 3~6학년 이 한 문서 안에 섞여 들어온다.
+    // 되살린 장소·대상까지 맞추려고 채운 뒤에 한다(예전에 '년' 으로 배워 둔 것이 있다).
+    const fixes = [];
+    st.rows = st.rows.map((r) => {
+      const { next, changes } = normalizeActivity(r);
+      fixes.push(...changes);
+      return next;
+    });
     drawPreview();
     if (!rows.length) { toast('읽어들일 일정을 찾지 못했습니다. 형식을 확인해 주세요.', 'warn'); return; }
     const extra = filled || hinted
@@ -71,7 +80,10 @@ export function renderImporter(ctx) {
     const back = recalled ? ` 전에 적으신 장소·대상 ${recalled}건을 되살렸습니다.` : '';
     const off = st.rows.filter((r) => !r._include).length;
     const offNote = off ? ` 쉬는 날 ${off}건은 체크를 꺼 두었습니다(학사일정 탭에서 올리세요).` : '';
-    toast(`${rows.length}건을 읽었습니다.${extra}${back}${offNote} 내용을 확인한 뒤 등록하세요.`, 'ok');
+    const fixNote = fixes.length
+      ? ` 표기 ${fixes.length}곳을 맞췄습니다(${describeChange(fixes[0])}${fixes.length > 1 ? ' 등' : ''}).`
+      : '';
+    toast(`${rows.length}건을 읽었습니다.${extra}${back}${fixNote}${offNote} 내용을 확인한 뒤 등록하세요.`, 'ok');
   };
 
   const handleFile = async (file) => {
@@ -297,7 +309,12 @@ function activityPreviewTable(rows) {
         ...FIELDS.map(([key, , type]) => h('td', {},
           h('input', {
             class: `cell ${!r[key] && key === 'date' ? 'cell-warn' : ''}`, type: type || 'text', value: r[key] || '',
-            onChange: (e) => { r[key] = e.target.value.trim(); e.target.classList.toggle('cell-warn', key === 'date' && !r[key]); },
+            onChange: (e) => {
+              // 칸을 고칠 때도 같은 규칙으로 맞춘다(학년·교시는 하이픈, 시각은 물결).
+              r[key] = normalizeField(key, e.target.value.trim());
+              e.target.value = r[key];
+              e.target.classList.toggle('cell-warn', key === 'date' && !r[key]);
+            },
           }),
           key === 'owner' ? suggestChip(r) : null)),
         h('td', {}, h('select', {

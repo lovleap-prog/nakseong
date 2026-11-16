@@ -142,7 +142,14 @@ export function openModal(title, bodyNode, actions = [], { confirmClose } = {}) 
       h('div', { class: 'modal-head' }, h('h3', {}, title), h('button', { class: 'icon-btn', title: '닫기', onClick: tryClose }, '✕')),
       h('div', { class: 'modal-body' }, bodyNode),
       h('div', { class: 'modal-actions' }, ...actions.map((a) =>
-        h('button', { class: `btn ${a.class || ''}`, onClick: () => a.onClick(close) }, a.label)))));
+        h('button', {
+          class: `btn ${a.class || ''}`,
+          // 누르는 순간 입력칸에서 포커스를 빼앗지 않는다. 빼앗으면 그 칸의 'change' 가 먼저
+          // 일어나 안내 상자(겹침·표기 맞춤)가 새로 뜨고, 창이 커지며 단추가 마우스 밑에서
+          // 비켜나 첫 번째 누름이 헛손질이 됐다. 저장 단추가 칸의 값을 직접 읽으므로 괜찮다.
+          onMousedown: (e) => e.preventDefault(),
+          onClick: () => a.onClick(close),
+        }, a.label)))));
   closeOnBackdrop(back, tryClose);
   document.body.appendChild(back);
   return close;
