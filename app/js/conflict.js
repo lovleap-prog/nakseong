@@ -296,8 +296,44 @@ function sharedGrades(a, b, ta, tb) {
   return [...out].sort((x, y) => x - y);
 }
 
+// ── 같은 수업을 두 군데 적은 것 ─────────────────────────────
+// 원어민 순회·국악처럼 시간표에 교시마다 들어 있는 수업을, 주간교육활동계획에
+// 넣으려고 교육활동에도 한 줄 적는다. 그러면 교시마다 짝이 맞아떨어져 전부 겹침으로
+// 떴다. 겹친 게 아니라 같은 것이다. 관리자가 날마다 [중복 인정] 을 누를 일이 아니다.
+
+const isSlot = (it) => it && (it.kind === 'timetable' || String(it.id || '').startsWith('tt_'));
+
+/**
+ * 시간표 칸 제목에서 과목만 남긴다.
+ *   '영어6(원어민)' → '영어',  '영어5,6(원어민)' → '영어',  '꿈자람반1,2' → '꿈자람반'
+ */
+export function subjectOf(title) {
+  return String(title || '')
+    .replace(/\([^)]*\)|（[^）]*）/g, '')
+    .replace(/[\d\s,·~\-]+/g, '');
+}
+
+/**
+ * 시간표 칸과 교육활동(또는 반복일정)이 같은 수업인가.
+ * 칸의 과목이 활동명에 들어 있거나, 활동의 계(부서)가 바로 그 과목이면 같은 것으로 본다.
+ *   '영어6(원어민)' ↔ '영어원어민 순회'  — 같은 수업
+ *   '꿈자람반1,2'   ↔ '장애이해 교육'(장소 꿈자람반) — 다른 것. 장소가 겹치면 그대로 알린다.
+ * 과목이 두 글자가 안 되면 따지지 않는다 — 한 글자로는 아무 데나 걸린다.
+ */
+export function sameLesson(a, b) {
+  const slot = isSlot(a) ? a : isSlot(b) ? b : null;
+  const other = slot === a ? b : a;
+  if (!slot || isSlot(other)) return false;
+  const subj = subjectOf(slot.title);
+  if (subj.length < 2) return false;
+  const title = String(other.title || '').replace(/\s+/g, '');
+  return title.includes(subj) || String(other.dept || '').replace(/\s+/g, '') === subj;
+}
+
 /** 두 항목이 왜 겹치는지 — 인정 여부는 보지 않는다. 겹치지 않으면 빈 배열. */
 export function rawClashReasons(a, b) {
+  // 같은 수업을 시간표와 교육활동에 두 번 적은 것은 겹침이 아니다.
+  if (sameLesson(a, b)) return [];
   // 두 항목이 서로 다른 시정으로 움직일 수 있다(수업공개 날의 이원화).
   const ta = periodTable(bellFor(a));
   const tb = periodTable(bellFor(b));

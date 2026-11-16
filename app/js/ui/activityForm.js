@@ -224,6 +224,8 @@ export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = 
         id: a.id, clashOk: a.clashOk || [],
         date, time: inp.time.value.trim(), bellId: bellSel.value,
         place: inp.place.value.trim(), target: inp.target.value.trim(), owner: inp.owner.value.trim(),
+        // 활동명·계는 '시간표에 이미 있는 같은 수업인가' 를 가릴 때 쓴다(conflict.js 의 sameLesson).
+        title: inp.title.value.trim(), dept: inp.dept.value.trim(),
       };
       if (cand.time) {
         clashing = occupancyOn(date)
@@ -246,9 +248,8 @@ export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = 
   /**
    * 겹쳐도 되는 것이면 이 자리에서 바로 인정한다.
    *
-   * 원어민 순회처럼 교육활동과 시간표에 같은 수업을 두 군데 적어 두는 일이 있다.
-   * 그것은 틀린 겹침이 아니라 '같은 것을 두 번 적은 것' 이라 고칠 것이 없는데,
-   * 창을 닫고 카드를 찾아 🎨 옆 단추를 눌러야 했다. 경고가 뜨는 자리에 둔다.
+   * 겹쳐도 되는 것인데 창을 닫고 카드를 찾아 단추를 눌러야 했다. 경고가 뜨는 자리에 둔다.
+   * (시간표에 있는 같은 수업을 교육활동에도 적은 것은 애초에 겹침으로 치지 않는다 — sameLesson)
    *
    * 새로 쓰는 일정에는 두지 않는다 — 아직 저장된 문서가 없어 적어 둘 곳이 없다.
    */
@@ -267,9 +268,9 @@ export function openActivityForm(existing, { onSaved, defaultDate, copyFrom } = 
           } catch (e) { toast(e.message || '인정하지 못했습니다.', 'warn'); }
         },
       }, `이 겹침 ${clashing.length}건 인정`),
-      h('span', { class: 'muted small' }, ' 같은 수업을 시간표에도 적어 둔 것이라면 눌러두세요.'));
+      h('span', { class: 'muted small' }, ' 겹쳐도 되는 것이면 눌러두세요.'));
   }
-  for (const el of [inp.date, inp.endDate, inp.time, inp.place, inp.target, inp.owner, bellSel, multiChk]) {
+  for (const el of [inp.date, inp.endDate, inp.time, inp.title, inp.place, inp.target, inp.owner, inp.dept, bellSel, multiChk]) {
     el.addEventListener('input', checkAhead);
     el.addEventListener('change', checkAhead);
   }
