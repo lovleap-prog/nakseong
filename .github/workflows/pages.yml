@@ -22,17 +22,28 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# 올리기와 배포를 두 작업으로 나눈다.
+#
+# 한 작업 안에서 올리자마자 배포하면, GitHub 가 올린 묶음을 아직 등록하기 전에 배포가
+# 찾으러 가서 'No artifacts named "github-pages" were found' 로 떨어지는 일이 잦았다
+# (2026-11-24 v67 · v68 이 연달아 그랬고, 다시 돌리면 됐다). 배포를 따로 떼면 그 작업이
+# 시작되는 사이에 등록이 끝난다. GitHub 의 공식 예시도 이렇게 나눈다.
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app          # 앱은 이 폴더에만 있다
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4
