@@ -376,16 +376,33 @@ function versionBox() {
     btn.disabled = false;
   };
 
-  // 캐시와 서비스워커를 통째로 버리고 다시 받는다. 자료는 건드리지 않는다.
+  // 새 판을 받는다. 자료는 건드리지 않는다.
+  //
+  // 예전에는 서비스워커를 지우고 캐시를 버린 뒤 다시 열었다. 그런데 서비스워커가 없는
+  // 채로 열면 브라우저의 HTTP 캐시가 앱 파일을 내준다. GitHub Pages 는 파일마다
+  // '10분은 다시 묻지 말라' 를 붙여 보내서, 배포 직후에는 이 단추를 아무리 눌러도
+  // 옛 판이 다시 열렸다(서버 v67, 이 컴퓨터 v66 이 그대로였다).
+  //
+  // 이제 서비스워커는 그대로 두고 새 것으로 갈아 끼운다. 새 서비스워커는 파일마다
+  // 서버에 '바뀌었나?' 를 묻고 받으므로(sw.js 의 fresh) 다시 열면 새 판이 온다.
   const force = async (btn) => {
     if (!(await confirmDialog(
-      '이 컴퓨터에 받아둔 앱 파일을 모두 버리고 새로 받습니다. 입력하신 자료는 그대로 있습니다.',
+      '서버에서 앱 파일을 새로 받습니다. 입력하신 자료는 그대로 있습니다.',
       { okText: '새로 받기' }))) return;
     btn.disabled = true;
     try {
       if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister()));
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+          // 새 sw.js 가 있으면 깔리고 곧바로 이 화면을 맡는다(skipWaiting · clients.claim).
+          // 그것을 기다렸다가 다시 연다. 너무 오래 걸리면 그냥 연다.
+          const took = new Promise((done) => {
+            navigator.serviceWorker.addEventListener('controllerchange', done, { once: true });
+            setTimeout(done, 5000);
+          });
+          await reg.update().catch(() => {});
+          if (reg.installing || reg.waiting) await took;
+        }
       }
       if (window.caches) {
         const keys = await caches.keys();
