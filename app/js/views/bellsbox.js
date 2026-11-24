@@ -8,6 +8,9 @@ import { newBell } from '../model.js';
 import { list, put, remove } from '../store.js';
 import { bellList, defaultBell, fmtMin, periodPairs, periodDocs } from '../conflict.js';
 
+/** 단축 시정을 새로 만들 때 몇 교시까지 둘지 */
+const SHORT_DAY = 6;
+
 /** 단축 시정 기본안 — 40분 수업을 30분으로 줄이고 쉬는 시간도 줄인 형태 */
 const SHORT_PRESET = [
   ['09:00', '09:30'], ['09:35', '10:05'], ['10:10', '10:40'], ['10:45', '11:15'],
@@ -64,7 +67,9 @@ export function bellsBox(ctx) {
         ? h('button', {
           class: 'btn', onClick: () => make({
             name: '단축 시정',
-            periods: periodDocs(SHORT_PRESET.slice(0, periodPairs(def.periods).length)),
+            // 단축하는 날은 보통 5·6교시까지만 한다. 기본 시정이 8교시까지 있어도 따라가지 않는다.
+            // 5교시까지면 6교시 줄의 ✕ 로 지우면 된다.
+            periods: periodDocs(SHORT_PRESET.slice(0, Math.min(SHORT_DAY, periodPairs(def.periods).length))),
             order: bells.length + 1,
           }, '단축 시정을 넣었습니다. 시각을 학교에 맞게 고쳐주세요.'),
         }, '+ 단축 시정')
@@ -113,6 +118,26 @@ function bellCard(b, def, redraw, saved) {
   nameIn.addEventListener('change', () => save());
   noteIn.addEventListener('change', () => save());
 
+  // 교시 하나를 빼거나 더한다. 여태 지우는 단추가 없어 단축 시정에 7·8교시가 그대로 남았다.
+  // (시각 칸을 비우면 저장 때 빠지긴 했지만 그것을 알 길이 없었다.)
+  const dropRow = async (i) => {
+    if (inputs.length <= 1) return toast('교시가 하나는 있어야 합니다.', 'warn');
+    inputs.splice(i, 1);
+    await save();
+    toast(`${i + 1}교시를 지웠습니다.`, 'ok');
+    redraw();
+  };
+  const addRow = async () => {
+    // 앞 교시와 같은 길이로, 10분 쉬고 잇는다.
+    const toMin = (t) => { const [hh, mm] = String(t).split(':').map(Number); return hh * 60 + mm; };
+    const last = inputs[inputs.length - 1];
+    const s0 = last ? toMin(last[1].value) + 10 : 9 * 60;
+    const len = last ? Math.max(20, toMin(last[1].value) - toMin(last[0].value)) : 40;
+    inputs.push([{ value: fmtMin(s0) }, { value: fmtMin(s0 + len) }]);
+    await save();
+    redraw();
+  };
+
   const grid = h('div', { class: 'period-rows' },
     ...rows.map(([s, e], i) => {
       const a = h('input', { class: 'input', type: 'time', value: s });
@@ -120,8 +145,17 @@ function bellCard(b, def, redraw, saved) {
       [a, c].forEach((el) => el.addEventListener('change', () => save()));
       inputs.push([a, c]);
       return h('div', { class: 'period-row' },
-        h('span', { class: 'period-label' }, `${i + 1}교시`), a, h('span', {}, '~'), c);
-    }));
+        h('span', { class: 'period-label' }, `${i + 1}교시`), a, h('span', {}, '~'), c,
+        real && rows.length > 1
+          ? h('button', {
+            class: 'icon-btn danger', type: 'button', title: `${i + 1}교시 지우기`,
+            onClick: () => dropRow(i),
+          }, '✕')
+          : null);
+    }),
+    real
+      ? h('button', { class: 'btn btn-sm period-add', type: 'button', onClick: addRow }, '+ 교시 추가')
+      : null);
 
   return h('div', { class: `bell-card${b.isDefault ? ' is-default' : ''}` },
     h('div', { class: 'bell-head' },

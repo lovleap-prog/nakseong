@@ -651,6 +651,8 @@ body.dragging-now .band-grid { pointer-events: none; }
 .period-row { display: flex; align-items: center; gap: 6px; }
 .period-label { font-size: 12.5px; font-weight: 700; color: var(--muted); min-width: 42px; }
 .period-row .input { padding: 4px 8px; font-size: 13px; }
+.period-row .icon-btn { margin-left: 2px; }
+.period-add { justify-self: start; align-self: center; }
 @media (max-width: 640px) { .period-rows { grid-template-columns: 1fr; } }
 
 /* ── 시간표 복사·가져오기 ───────────── */

@@ -1,10 +1,31 @@
 // 나이스 일일교육활동 결재용 문구 · 메신저 안내문 생성
 import { fmtK, byTime, WEEKDAY, parseYmd, CATEGORY } from '../model.js';
-import { describeTime, dayBellId, bellById, defaultBell } from '../conflict.js';
+import { describeTime, dayBellId, bellById, defaultBell, periodPairs } from '../conflict.js';
 import { isNoMeal, cleanDetail } from '../select.js';
 
 const KO_ORDER = ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차', '카', '타', '파', '하'];
 const koIdx = (i) => (i < KO_ORDER.length ? KO_ORDER[i] : `${KO_ORDER[i % 14]}${Math.floor(i / 14) + 1}`);
+
+/**
+ * '※ 단축 시정 운영' 과 그 아래 교시별 시각.
+ *
+ * 이름만 적어 두면 '그래서 몇 시에 끝나지?' 를 시정표를 따로 찾아봐야 알았다.
+ * 단축하는 날 안내문을 받는 사람이 정작 궁금한 것은 시각이다. 한 줄에 세 교시씩 적는다.
+ *
+ *   ※ 단축 시정 운영
+ *     1교시 09:00~09:30 · 2교시 09:40~10:10 · 3교시 10:20~10:50
+ *     4교시 11:00~11:30 · 5교시 12:20~12:50
+ *
+ * 기본 시정인 날은 아무것도 적지 않는다.
+ */
+export function bellLines(date) {
+  const b = bellById(dayBellId(date));
+  if (!b || b.id === defaultBell().id) return [];
+  const cells = periodPairs(b.periods).map(([s, e], i) => `${i + 1}교시 ${s}~${e}`);
+  const rows = [];
+  for (let i = 0; i < cells.length; i += 3) rows.push(`  ${cells.slice(i, i + 3).join(' · ')}`);
+  return [`※ ${b.name} 운영`, ...rows];
+}
 
 /** 한 줄 요약: "1~2교시 3학년 안전교육(시청각실, 김민수)" */
 export function lineOf(a, { withTime = true } = {}) {
@@ -29,8 +50,7 @@ export function neisApprovalText(p) {
   const L = [];
 
   L.push(`${fmtK(date)} 일일교육활동 계획`);
-  const dayBell = bellById(dayBellId(date));
-  if (dayBell && dayBell.id !== defaultBell().id) L.push(`※ ${dayBell.name} 운영`);
+  L.push(...bellLines(date));
   // 급식이 없는 날은 기안에 한 줄 적어 둔다. 놓치면 그 날 아이들 점심이 걸린다.
   if (isNoMeal(date)) L.push('※ 비급식일 (급식 미실시)');
   L.push('');
@@ -148,8 +168,7 @@ export function dailyPlanText(p) {
   // 되는 일이라, 남는 문서에 이름을 적어 두지 않는다.
   // 보결 배정은 [일일] 화면의 체크리스트와 [보결 안내 복사] 로 알린다.
 
-  const dayBell = bellById(dayBellId(date));
-  if (dayBell && dayBell.id !== defaultBell().id) L.push(`※ ${dayBell.name} 운영`);
+  L.push(...bellLines(date));
   if (isNoMeal(date)) L.push('※ 비급식일 (급식 없음)');
 
   L.push('');
@@ -174,7 +193,10 @@ export function messengerText(p) {
   const L = [];
   L.push(`[일일교육활동 안내] ${d.getMonth() + 1}/${d.getDate()}(${WEEKDAY[d.getDay()]})`);
   const mBell = bellById(dayBellId(date));
-  if (mBell && mBell.id !== defaultBell().id) L.push(`※ 오늘은 ${mBell.name} 입니다.`);
+  if (mBell && mBell.id !== defaultBell().id) {
+    L.push(`※ 오늘은 ${mBell.name} 입니다.`);
+    L.push(...bellLines(date).slice(1));   // 이름 줄은 위에 따로 적었으니 시각만
+  }
   if (isNoMeal(date)) L.push('※ 오늘은 비급식일입니다. (급식 없음)');
   L.push('');
   L.push('▷ 오늘의 교육활동');

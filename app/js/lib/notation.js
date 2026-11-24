@@ -42,6 +42,27 @@ const CLOCK_RUN = new RegExp(`(\\d{1,2}:\\d{2})\\s*${DASH}\\s*(\\d{1,2}:\\d{2})`
 const MD = '(?:1[0-2]|0?[1-9])\\.\\s?(?:[12]\\d|3[01]|0?[1-9])\\.?';
 const DATE_RUN = new RegExp(`(?<![\\d.])(${MD})\\s*${DASH}\\s*(${MD})(?![\\d])`, 'g');
 
+// 대상 칸에서는 숫자만 쳐도 학년이다          3-6 → 3-6학년, 5 → 5학년, 6-5-3-4-6 → 6-5-3-4-6학년
+// 뒤에 '반·명·교시' 처럼 다른 낱말이 붙은 숫자는 학년이 아니라 두고(3학년 2반, 교사 3명),
+// 1~6 이 아닌 숫자가 섞인 것도 두고(20명, 3-7),
+// '3-1' 처럼 앞이 큰 두 숫자는 '3학년 1반' 일 수 있어 그대로 둔다.
+const SEP = '[~∼～〜\\-－–—,/·]';
+const BARE_GRADES = new RegExp(
+  `(?<![\\d.:]|${SEP}\\s*)([1-6](?:\\s*${SEP}\\s*[1-6])*)`
+  + `(?![\\d.:]|\\s*${SEP}\\s*\\d|\\s*(?:학년|년|반|명|교시|시|분|층|호|번|개|회|차|월|일|세|살|학급|모둠|조|쪽|권|팀|부))`, 'g');
+
+/** 대상 칸 — 숫자만 친 학년에 '학년' 을 붙인다. */
+export function normBareGrades(text) {
+  return String(text || '').replace(BARE_GRADES, (whole, run) => {
+    const nums = run.match(/[1-6]/g);
+    const dashed = new RegExp(DASH).test(run);
+    // '3-1' — 두 숫자가 줄표로 이어졌는데 앞이 더 크면 학년 범위가 아니라 반일 수 있다.
+    if (nums.length === 2 && dashed && Number(nums[0]) > Number(nums[1])) return whole;
+    const tidy = run.replace(new RegExp(`\\s*${DASH}\\s*`, 'g'), '-').replace(/\s+/g, '');
+    return `${tidy}${GRADE_WORD}`;
+  });
+}
+
 /** 학년 표기만 맞춘다. */
 export function normGrades(text) {
   return String(text || '')
@@ -73,7 +94,7 @@ function normInParens(text) {
 
 /** 칸마다 무엇을 맞추는가 */
 const RULES = {
-  target: (t) => normGrades(t),
+  target: (t) => normBareGrades(normGrades(t)),
   time: (t) => normTime(t),
   title: (t) => normDates(normInParens(t)),
   detail: (t) => normDates(normInParens(normTime(t))),
